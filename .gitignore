@@ -3,3 +3,4 @@ dist
 .env
 .env.local
 Laragon_Installer.exe
+.vercel

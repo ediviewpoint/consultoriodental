@@ -16,6 +16,7 @@ import Liquidacion from './components/Liquidacion';
 import Admision from './components/Admision';
 import Login from './components/Login';
 import BookingPage from './components/BookingPage';
+import Landing from './components/Landing';
 
 const VALID_SCREENS = ['dashboard','pacientes','ficha','agenda','cobros','reportes','configuracion','presupuestos','liquidacion','admision'];
 
@@ -30,7 +31,9 @@ const canAccess = (role, screen) => (ROLE_SCREENS[role] ?? ROLE_SCREENS.admin).h
 const initial = (() => {
   const h = (window.location.hash || '').replace('#', '');
   if (h === 'booking') return 'booking';
-  return VALID_SCREENS.includes(h) ? h : 'dashboard';
+  if (h === 'login') return 'login';
+  if (VALID_SCREENS.includes(h)) return h;
+  return 'landing';
 })();
 
 const App = () => {
@@ -104,11 +107,14 @@ const App = () => {
     window.location.hash = '';
   };
 
-  // Redirect to dashboard if restored session lands on a forbidden screen
+  // Redirect to dashboard if restored session lands on a forbidden screen or public screen
   useEffect(() => {
-    if (currentUser && !canAccess(currentUser.role, screen)) {
-      setScreen('dashboard');
-      window.location.hash = 'dashboard';
+    if (currentUser) {
+      if (screen === 'landing' || screen === 'login') {
+        navigate('dashboard');
+      } else if (!canAccess(currentUser.role, screen)) {
+        navigate('dashboard');
+      }
     }
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -123,11 +129,15 @@ const App = () => {
   const openPatient = (id) => { setPatientId(id); setScreen('ficha'); window.location.hash = 'ficha'; };
   const activeNav   = screen === 'ficha' ? 'pacientes' : screen;
 
+  if (screen === 'landing') {
+    return <Landing onNavigate={navigate} />;
+  }
+
   if (screen === 'booking') {
     return (
       <BookingPage
         sucursales={sucursales}
-        onBack={() => { setScreen('dashboard'); window.location.hash = 'dashboard'; }}
+        onBack={() => navigate('landing')}
       />
     );
   }
