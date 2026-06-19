@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\ACER\\\\AppData\\\\Local\\\\Temp\\\\design_extract\\\\dentalcare-pro-design-system\" | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\Users\\\\ACER\\\\AppData\\\\Local\\\\Temp\\\\design_extract\\\\dentalcare-pro-design-system\\\\\", \"\"\\) })",
+      "PowerShell(Copy-Item *)",
+      "PowerShell(Get-ChildItem -LiteralPath \"C:\\\\Users\\\\ACER\\\\consultorio dental\" | Where-Object { $_.Name -ne \"node_modules\" -and $_.Name -ne \".claude\" } | Select-Object Name)",
+      "Bash(npx vite *)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ACER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-ACER-consultorio-dental\\\\feffa4a8-3ba5-4b47-82e9-aba79342f9d7\\\\tasks\\\\bd9gffhrs.output\")",
+      "PowerShell(netstat *)",
+      "Bash(Get-ChildItem *)",
+      "mcp__stitch__list_projects",
+      "mcp__stitch__create_project",
+      "mcp__stitch__create_design_system",
+      "mcp__stitch__update_design_system",
+      "mcp__stitch__generate_screen_from_text",
+      "mcp__stitch__list_screens",
+      "Bash(timeout 4)",
+      "Bash(python -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p.get\\('name'\\), p.get\\('displayName',''\\), p.get\\('createTime',''\\)\\) for p in data.get\\('projects',[]\\)]\")",
+      "mcp__stitch__get_project",
+      "WebFetch(domain:contribution.usercontent.google.com)",
+      "mcp__stitch__get_screen",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(Get-Content *)",
+      "Bash(Select-Object -First 5)",
+      "Bash(Select-Object -First 15)",
+      "Bash(timeout 5)",
+      "Bash(Start-Process \"npm\" -ArgumentList \"run\",\"dev\" -NoNewWindow -PassThru)",
+      "Bash(Out-Null)",
+      "Bash(Start-Sleep -Seconds 4)",
+      "Bash(Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 3)",
+      "Bash(Select-Object -ExpandProperty StatusCode)",
+      "PowerShell(Start-Process \"npm\" -ArgumentList \"run\",\"dev\" -WorkingDirectory \"C:\\\\Users\\\\ACER\\\\consultorio dental\" -NoNewWindow; Start-Sleep -Seconds 5; try { \\(Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 3\\).StatusCode } catch { \"Puerto 5173 no responde, probando 5174...\"; try { \\(Invoke-WebRequest -Uri \"http://localhost:5174\" -UseBasicParsing -TimeoutSec 3\\).StatusCode } catch { \"No responde en 5174 tampoco\" } })",
+      "PowerShell(Start-Process \"http://localhost:5173\")",
+      "PowerShell(Get-Process *)",
+      "PowerShell(5173,5174,5175,5176,5177 | ForEach-Object { $port = $_; try { $r = Invoke-WebRequest -Uri \"http://localhost:$port\" -UseBasicParsing -TimeoutSec 2; \"$port -> $\\($r.StatusCode\\) | $\\($r.Content.Substring\\(0,[Math]::Min\\(80,$r.Content.Length\\)\\)\\)\" } catch { \"$port -> ERROR\" } })",
+      "PowerShell(Start-Process \"http://localhost:5177\")",
+      "PowerShell(Start-Process \"http://localhost:5177/#booking\")"
+    ]
+  }
+}

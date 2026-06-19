@@ -1,0 +1,114 @@
+/* ============================================================
+   DentalCare Pro — Color & Type Tokens
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --dc-bg:          #F0FDFA;
+  --dc-sidebar:     #134E4A;
+  --dc-primary:     #0D9488;
+  --dc-positive:    #10B981;
+  --dc-alert:       #F87171;
+  --dc-ink:         #1E293B;
+  --dc-card:        #FFFFFF;
+
+  --dc-teal-50:     #F0FDFA;
+  --dc-teal-100:    #CCFBF1;
+  --dc-teal-200:    #99F6E4;
+  --dc-teal-300:    #5EEAD4;
+  --dc-teal-400:    #2DD4BF;
+  --dc-teal-500:    #14B8A6;
+  --dc-teal-600:    #0D9488;
+  --dc-teal-700:    #0F766E;
+  --dc-teal-800:    #115E59;
+  --dc-teal-900:    #134E4A;
+  --dc-teal-950:    #042F2E;
+
+  --dc-slate-50:    #F8FAFC;
+  --dc-slate-100:   #F1F5F9;
+  --dc-slate-200:   #E2E8F0;
+  --dc-slate-300:   #CBD5E1;
+  --dc-slate-400:   #94A3B8;
+  --dc-slate-500:   #64748B;
+  --dc-slate-600:   #475569;
+  --dc-slate-700:   #334155;
+  --dc-slate-800:   #1E293B;
+  --dc-slate-900:   #0F172A;
+
+  --dc-status-confirmed:  #10B981;
+  --dc-status-progress:   #3B82F6;
+  --dc-status-pending:    #F59E0B;
+  --dc-status-complete:   #94A3B8;
+  --dc-status-cancelled:  #F87171;
+
+  --dc-tooth-healthy:   #10B981;
+  --dc-tooth-caries:    #F59E0B;
+  --dc-tooth-crown:     #3B82F6;
+  --dc-tooth-extracted: #F87171;
+  --dc-tooth-treatment: #FB923C;
+  --dc-tooth-missing:   #CBD5E1;
+
+  --dc-fg-1:        var(--dc-slate-800);
+  --dc-fg-2:        var(--dc-slate-600);
+  --dc-fg-3:        var(--dc-slate-500);
+  --dc-fg-4:        var(--dc-slate-400);
+  --dc-fg-inverse:  #FFFFFF;
+
+  --dc-bg-app:      var(--dc-bg);
+  --dc-bg-card:     #FFFFFF;
+  --dc-bg-muted:    var(--dc-slate-50);
+  --dc-bg-hover:    var(--dc-slate-100);
+
+  --dc-border:        var(--dc-slate-200);
+  --dc-border-strong: var(--dc-slate-300);
+  --dc-divider:       var(--dc-slate-100);
+
+  --dc-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --dc-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --dc-text-xs:   12px;
+  --dc-text-sm:   13px;
+  --dc-text-base: 14px;
+  --dc-text-md:   15px;
+  --dc-text-lg:   17px;
+  --dc-text-xl:   20px;
+  --dc-text-2xl:  24px;
+  --dc-text-3xl:  30px;
+  --dc-text-4xl:  36px;
+
+  --dc-w-regular:  400;
+  --dc-w-medium:   500;
+  --dc-w-semibold: 600;
+  --dc-w-bold:     700;
+
+  --dc-lh-tight:  1.15;
+  --dc-lh-snug:   1.3;
+  --dc-lh-normal: 1.5;
+
+  --dc-track-tight: -0.02em;
+  --dc-track-mega:  0.12em;
+
+  --dc-space-1:  4px;   --dc-space-2:  8px;
+  --dc-space-3:  12px;  --dc-space-4:  16px;
+  --dc-space-5:  20px;  --dc-space-6:  24px;
+  --dc-space-8:  32px;  --dc-space-10: 40px;
+
+  --dc-radius-xs:   4px;   --dc-radius-sm:   6px;
+  --dc-radius-md:   8px;   --dc-radius-lg:   12px;
+  --dc-radius-xl:   16px;  --dc-radius-pill: 999px;
+
+  --dc-shadow-xs:   0 1px 2px 0 rgba(15,23,42,0.04);
+  --dc-shadow-sm:   0 1px 2px 0 rgba(15,23,42,0.05), 0 1px 3px 0 rgba(15,23,42,0.06);
+  --dc-shadow-md:   0 4px 6px -1px rgba(15,23,42,0.06), 0 2px 4px -2px rgba(15,23,42,0.05);
+  --dc-shadow-lg:   0 10px 15px -3px rgba(15,23,42,0.08), 0 4px 6px -4px rgba(15,23,42,0.05);
+  --dc-shadow-xl:   0 20px 25px -5px rgba(15,23,42,0.10), 0 8px 10px -6px rgba(15,23,42,0.06);
+  --dc-shadow-card: 0 1px 3px 0 rgba(19,78,74,0.05), 0 1px 2px -1px rgba(19,78,74,0.04);
+  --dc-shadow-focus: 0 0 0 3px rgba(13,148,136,0.25);
+
+  --dc-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --dc-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dc-dur-fast:    120ms;
+  --dc-dur-base:    180ms;
+  --dc-dur-slow:    280ms;
+}
