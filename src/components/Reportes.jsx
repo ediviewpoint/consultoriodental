@@ -10,8 +10,8 @@ import {
 const CONS_FACTOR = { todos: 1, A: 0.55, B: 0.45 };
 const CONS_LABEL  = {
   todos: 'Ambos consultorios',
-  A: `Consultorio A · ${DC_DATA.DOCTORS[0].name}`,
-  B: `Consultorio B · ${DC_DATA.DOCTORS[1].name}`,
+  A: `Consultorio A · ${DC_DATA.DOCTORS[0]?.name || 'Doctor A'}`,
+  B: `Consultorio B · ${DC_DATA.DOCTORS[1]?.name || 'Doctor B'}`,
 };
 
 const Reportes = ({ consultorio: consGlobal }) => {
@@ -33,8 +33,8 @@ const Reportes = ({ consultorio: consGlobal }) => {
   const hasChart  = chartData.some(d => d.y > 0);
 
   const tableData = [
-    { cons: 'A', label: 'Consultorio A', doctor: DC_DATA.DOCTORS[0].name, ingr: Math.round(metrics.ingresos * 0.55 / 0.55 * 0.55), pac: Math.round(metrics.pacientes * 0.59), pct: 55 },
-    { cons: 'B', label: 'Consultorio B', doctor: DC_DATA.DOCTORS[1].name, ingr: Math.round(metrics.ingresos * 0.45 / 0.55 * 0.45), pac: Math.round(metrics.pacientes * 0.41), pct: 45 },
+    { cons: 'A', label: 'Consultorio A', doctor: DC_DATA.DOCTORS[0]?.name || 'Doctor A', ingr: Math.round(metrics.ingresos * 0.55 / 0.55 * 0.55), pac: Math.round(metrics.pacientes * 0.59), pct: 55 },
+    { cons: 'B', label: 'Consultorio B', doctor: DC_DATA.DOCTORS[1]?.name || 'Doctor B', ingr: Math.round(metrics.ingresos * 0.45 / 0.55 * 0.45), pac: Math.round(metrics.pacientes * 0.41), pct: 45 },
   ].filter(r => cons === 'todos' || r.cons === cons);
 
   return (

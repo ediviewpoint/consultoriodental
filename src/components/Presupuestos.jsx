@@ -151,7 +151,7 @@ const QuoteDoc = ({ q, compact = false }) => {
 // ── Builder de presupuesto ───────────────────────────────────────────────────
 const EMPTY_FORM = () => ({
   pacienteId: '',
-  doctor: DC_DATA.DOCTORS[0].name,
+  doctor: DC_DATA.DOCTORS[0]?.name || '',
   consultorio: 'A',
   fecha: TODAY,
   vencimiento: EXPIRY,

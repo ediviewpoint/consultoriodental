@@ -25,7 +25,7 @@ const Liquidacion = ({ user }) => {
     }
   }, [user]);
 
-  const doctor = DC_DATA.DOCTORS.find(d => d.id === doctorId) || DC_DATA.DOCTORS[0];
+  const doctor = DC_DATA.DOCTORS.find(d => d.id === doctorId) || DC_DATA.DOCTORS[0] || { name: '—', short: '—', color: '#94A3B8', comision: 0, id: doctorId };
   const rows   = DC_DATA.LIQUIDACION_SAMPLE.rows.filter(r => r.doctorId === doctorId);
 
   const totalBruto    = rows.reduce((s, r) => s + r.precioBase,    0);
