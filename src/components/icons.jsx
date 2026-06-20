@@ -53,4 +53,5 @@ export const Icons = {
   User:        (p) => <Ic {...p}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></Ic>,
   Activity:    (p) => <Ic {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></Ic>,
   Stethoscope: (p) => <Ic {...p}><path d="M6 2v5a6 6 0 0 0 12 0V2"/><path d="M6 2H4a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2"/><path d="M18 2h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2"/><path d="M12 13v5"/><circle cx="12" cy="20" r="2"/></Ic>,
+  Menu:        (p) => <Ic {...p}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></Ic>,
 };
