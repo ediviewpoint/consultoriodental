@@ -450,6 +450,32 @@ export const sendPasswordReset = async (email) => {
   if (error) throw error;
 };
 
+export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const tempPass = Array.from(crypto.getRandomValues(new Uint8Array(14)))
+    .map(b => chars[b % chars.length]).join('') + 'Aa1!';
+
+  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: tempPass });
+  if (error) throw error;
+
+  const userId = data.user?.id;
+  if (!userId) throw new Error('No se pudo crear el usuario');
+
+  const { error: pErr } = await supabase.from('perfiles').insert({
+    id: userId,
+    nombre: nombre.trim(),
+    rol,
+    doctor_id: rol === 'doctor' ? (doctorId || null) : null,
+  });
+  if (pErr) throw pErr;
+
+  await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: window.location.origin + window.location.pathname,
+  });
+
+  return userId;
+};
+
 export const buscarPorCI = async (ci) => {
   const { data } = await supabase
     .from('pacientes')
