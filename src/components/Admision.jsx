@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Icons } from './icons';
 import { Button, Card, Field, Avatar } from './ui';
-import { admitirPaciente, buscarPorCI, buscarPacientes } from '../lib/db';
+import { admitirPaciente, buscarPorCI, buscarPacientes, getSolicitudesPendientes, updateSolicitudEstado, createCita } from '../lib/db';
 
 const CUESTIONARIO = [
   { id: 'hipertension',    label: 'Hipertensión arterial'      },
@@ -21,12 +21,24 @@ const CUESTIONARIO = [
 const HABITOS     = ['Fumador', 'Alcohol frecuente', 'Bruxismo', 'Apertura limitada', 'Dolor ATM'];
 const DERIVACIONES = ['Ortodoncia', 'Cirugía maxilofacial', 'Endodoncia especializada', 'Periodoncia', 'Implantología', 'Radiología'];
 
+const HORA_SLOTS = (() => {
+  const slots = [];
+  for (let h = 8; h <= 18; h++) {
+    slots.push(`${String(h).padStart(2,'0')}:00`);
+    if (h < 18) slots.push(`${String(h).padStart(2,'0')}:30`);
+  }
+  return slots;
+})();
+
 // ── Pantalla 0: búsqueda previa ───────────────────────────────────
 const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
-  const [query,      setQuery]      = useState('');
-  const [results,    setResults]    = useState([]);
-  const [buscando,   setBuscando]   = useState(false);
-  const [hasBuscado, setHasBuscado] = useState(false);
+  const [query,       setQuery]       = useState('');
+  const [results,     setResults]     = useState([]);
+  const [buscando,    setBuscando]    = useState(false);
+  const [hasBuscado,  setHasBuscado]  = useState(false);
+  const [verSols,     setVerSols]     = useState(false);
+  const [sols,        setSols]        = useState([]);
+  const [loadingSols, setLoadingSols] = useState(false);
 
   useEffect(() => {
     setHasBuscado(false);
@@ -45,6 +57,32 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
     return () => clearTimeout(t);
   }, [query]);
 
+  const loadSolicitudes = async () => {
+    setVerSols(true);
+    setLoadingSols(true);
+    try {
+      const data = await getSolicitudesPendientes();
+      setSols(data || []);
+    } catch { } finally {
+      setLoadingSols(false);
+    }
+  };
+
+  const usarSolicitud = (sol) => {
+    const palabras = (sol.nombre || '').trim().split(' ');
+    const nombre   = palabras[0] || '';
+    const apellidos = palabras.slice(1).join(' ') || '';
+    onNuevo({
+      nombre,
+      apellidos,
+      tel:         sol.telefono || '',
+      doctorName:  sol.doctores?.nombre || '',
+      solicitudId: sol.id,
+      citaFecha:   sol.fecha || '',
+      citaHora:    sol.hora  || '',
+    });
+  };
+
   return (
     <div className="page">
       <div className="page-head">
@@ -55,7 +93,7 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
         <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
       </div>
 
-      <Card pad="lg">
+      <Card pad="lg" style={{ marginBottom: 16 }}>
         <div style={{ marginBottom: 22 }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600 }}>
             ¿Ya estuvo antes en la clínica?
@@ -79,10 +117,7 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
             style={{ paddingLeft: 38, fontSize: 15 }}
           />
           {buscando && (
-            <span style={{
-              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-              fontSize: 12, color: 'var(--dc-fg-3)',
-            }}>
+            <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--dc-fg-3)' }}>
               Buscando…
             </span>
           )}
@@ -91,11 +126,7 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
         {results.length > 0 && (
           <div>
             {results.map((p, i) => (
-              <div key={p.id} style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '12px 0',
-                borderBottom: i < results.length - 1 ? '1px solid var(--dc-divider)' : 'none',
-              }}>
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderBottom: i < results.length - 1 ? '1px solid var(--dc-divider)' : 'none' }}>
                 <Avatar initials={p.avatar} color={p.avatarColor} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{p.nombre} {p.apellidos}</div>
@@ -125,8 +156,53 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
         )}
       </Card>
 
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button icon={Icons.Plus} onClick={onNuevo}>
+      {/* ── Reservas web pendientes ── */}
+      <Card pad="lg" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: verSols ? 16 : 0 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>¿Viene de una reserva web?</div>
+            <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 2 }}>
+              Vincula la solicitud pendiente y el formulario se pre-llena automáticamente.
+            </div>
+          </div>
+          {!verSols
+            ? <Button variant="secondary" icon={Icons.Bell} onClick={loadSolicitudes}>Ver reservas pendientes</Button>
+            : <Button variant="ghost" size="sm" onClick={() => setVerSols(false)}>Ocultar</Button>
+          }
+        </div>
+
+        {verSols && (
+          loadingSols ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--dc-fg-3)', fontSize: 13 }}>Cargando…</div>
+          ) : sols.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--dc-fg-3)', fontSize: 13 }}>
+              No hay reservas web pendientes
+            </div>
+          ) : (
+            <div>
+              {sols.map((sol, i) => (
+                <div key={sol.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 0', borderBottom: i < sols.length - 1 ? '1px solid var(--dc-divider)' : 'none' }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--dc-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                    {(sol.nombre || '?')[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{sol.nombre}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dc-fg-3)', marginTop: 2 }}>
+                      {sol.telefono && <span>{sol.telefono}</span>}
+                      {sol.fecha && <span style={{ marginLeft: 8 }}>📅 {sol.fecha} {sol.hora}</span>}
+                      {sol.doctores?.nombre && <span style={{ marginLeft: 8 }}>Dr. {sol.doctores.nombre}</span>}
+                    </div>
+                  </div>
+                  <Button onClick={() => usarSolicitud(sol)}>Usar esta reserva →</Button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </Card>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button icon={Icons.Plus} onClick={() => onNuevo(null)}>
           {hasBuscado && results.length === 0
             ? 'No está en el sistema — Registrar como nuevo →'
             : 'Registrar paciente nuevo →'}
@@ -137,25 +213,30 @@ const BusquedaPrevia = ({ onNuevo, onVerFicha, onCancel }) => {
 };
 
 // ── Paso 1: Datos personales ──────────────────────────────────────
-const Step1 = ({ form, onChange, doctors, sucursales, isDoctor, duplicado, buscandoCI, ignorarDup, onIgnorar, onVerFicha }) => {
-  const sucEntries  = sucursales ? Object.entries(sucursales) : [['A', { nombre: 'Sucursal A' }], ['B', { nombre: 'Sucursal B' }]];
+const Step1 = ({ form, onChange, doctors, sucursales, isDoctor, duplicado, buscandoCI, ignorarDup, onIgnorar, onVerFicha, solicitudVinculada }) => {
+  const sucEntries    = sucursales ? Object.entries(sucursales) : [['A', { nombre: 'Sucursal A' }], ['B', { nombre: 'Sucursal B' }]];
   const docsFiltrados = doctors.filter(d => !form.consultorio || d.consultorio === form.consultorio);
 
   return (
     <div>
       <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 600 }}>Datos personales</h3>
 
+      {/* Banner reserva vinculada */}
+      {solicitudVinculada && (
+        <div style={{ background: '#F0FDFA', border: '1px solid #A7F3D0', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Icons.CheckCircle size={16} style={{ color: 'var(--dc-primary)', flexShrink: 0 }} />
+          <div style={{ fontSize: 13, color: '#134E4A' }}>
+            <strong>Reserva web vinculada</strong> — Al guardar se marcará como completada automáticamente.
+          </div>
+        </div>
+      )}
+
       {/* Banner duplicado por CI */}
       {duplicado && !ignorarDup && (
-        <div style={{
-          background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10,
-          padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 12, alignItems: 'flex-start',
-        }}>
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <Icons.AlertCircle size={18} style={{ color: '#D97706', flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E' }}>
-              Ya existe un paciente con C.I. {form.ci}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E' }}>Ya existe un paciente con C.I. {form.ci}</div>
             <div style={{ fontSize: 12, color: '#78350F', marginTop: 3 }}>
               {duplicado.nombre} {duplicado.apellidos}
               {duplicado.tel ? ` · Tel: ${duplicado.tel}` : ''}
@@ -170,9 +251,7 @@ const Step1 = ({ form, onChange, doctors, sucursales, isDoctor, duplicado, busca
       )}
 
       {buscandoCI && (
-        <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginBottom: 12 }}>
-          Verificando C.I. en el sistema…
-        </div>
+        <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginBottom: 12 }}>Verificando C.I. en el sistema…</div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -210,22 +289,14 @@ const Step1 = ({ form, onChange, doctors, sucursales, isDoctor, duplicado, busca
           </select>
         </Field>
         <Field label="Sucursal *">
-          <select
-            className="select" value={form.consultorio} disabled={isDoctor}
-            onChange={e => { onChange('consultorio', e.target.value); onChange('doctor', ''); }}
-            style={isDoctor ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-          >
+          <select className="select" value={form.consultorio} disabled={isDoctor} onChange={e => { onChange('consultorio', e.target.value); onChange('doctor', ''); }} style={isDoctor ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
             {sucEntries.map(([k, s]) => (
               <option key={k} value={k}>Sucursal {k} — {s.nombre}</option>
             ))}
           </select>
         </Field>
         <Field label="Doctor asignado *">
-          <select
-            className="select" value={form.doctor} disabled={isDoctor}
-            onChange={e => onChange('doctor', e.target.value)}
-            style={isDoctor ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-          >
+          <select className="select" value={form.doctor} disabled={isDoctor} onChange={e => onChange('doctor', e.target.value)} style={isDoctor ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
             <option value="">Seleccionar...</option>
             {docsFiltrados.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
@@ -261,13 +332,7 @@ const Step2 = ({ form, onChange }) => {
         {CUESTIONARIO.map(q => {
           const active = !!form.cuestionario[q.id];
           return (
-            <button key={q.id} onClick={() => toggleQ(q.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8,
-              border: `1.5px solid ${active ? '#DC2626' : 'var(--dc-border)'}`,
-              background: active ? '#FEF2F2' : '#fff',
-              color: active ? '#DC2626' : 'var(--dc-fg-2)',
-              textAlign: 'left', cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 400,
-            }}>
+            <button key={q.id} onClick={() => toggleQ(q.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${active ? '#DC2626' : 'var(--dc-border)'}`, background: active ? '#FEF2F2' : '#fff', color: active ? '#DC2626' : 'var(--dc-fg-2)', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 400 }}>
               <span style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${active ? '#DC2626' : 'var(--dc-border)'}`, background: active ? '#DC2626' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {active && <Icons.Check size={11} style={{ color: '#fff' }} />}
               </span>
@@ -291,12 +356,7 @@ const Step2 = ({ form, onChange }) => {
         {HABITOS.map(h => {
           const active = !!form.habitos[h];
           return (
-            <button key={h} onClick={() => toggleH(h)} style={{
-              padding: '5px 13px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: active ? 700 : 400,
-              border: `1.5px solid ${active ? '#B45309' : 'var(--dc-border)'}`,
-              background: active ? '#FFFBEB' : '#fff',
-              color: active ? '#B45309' : 'var(--dc-fg-2)',
-            }}>{h}</button>
+            <button key={h} onClick={() => toggleH(h)} style={{ padding: '5px 13px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: active ? 700 : 400, border: `1.5px solid ${active ? '#B45309' : 'var(--dc-border)'}`, background: active ? '#FFFBEB' : '#fff', color: active ? '#B45309' : 'var(--dc-fg-2)' }}>{h}</button>
           );
         })}
       </div>
@@ -337,12 +397,7 @@ const Step3 = ({ form, onChange }) => {
         {DERIVACIONES.map(d => {
           const active = form.derivaciones.includes(d);
           return (
-            <button key={d} onClick={() => toggle(d)} style={{
-              padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: active ? 700 : 400,
-              border: `1.5px solid ${active ? 'var(--dc-primary)' : 'var(--dc-border)'}`,
-              background: active ? 'var(--dc-primary)' : '#fff',
-              color: active ? '#fff' : 'var(--dc-fg-2)',
-            }}>{d}</button>
+            <button key={d} onClick={() => toggle(d)} style={{ padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: active ? 700 : 400, border: `1.5px solid ${active ? 'var(--dc-primary)' : 'var(--dc-border)'}`, background: active ? 'var(--dc-primary)' : '#fff', color: active ? '#fff' : 'var(--dc-fg-2)' }}>{d}</button>
           );
         })}
       </div>
@@ -357,6 +412,133 @@ const Step3 = ({ form, onChange }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// ── Fase final: agendar primera cita + WhatsApp ───────────────────
+const FaseCita = ({ paciente, form, doctors, solicitudFecha, solicitudHora, onComplete }) => {
+  const today     = new Date().toISOString().slice(0, 10);
+  const [fecha,   setFecha]   = useState(solicitudFecha || today);
+  const [hora,    setHora]    = useState(solicitudHora  || '');
+  const [trat,    setTrat]    = useState(form.motivo || form.planTexto || 'Primera consulta');
+  const [saving,  setSaving]  = useState(false);
+  const [citaOk,  setCitaOk]  = useState(false);
+  const [error,   setError]   = useState('');
+
+  const doc = doctors.find(d => d.name === form.doctor);
+
+  const sendWhatsApp = () => {
+    const tel = (paciente.tel || '').replace(/\D/g, '');
+    const doctor = form.doctor ? `Tu doctor asignado es *${form.doctor}*.` : '';
+    const msg = `Hola ${paciente.nombre} 😊, bienvenido/a a *DentalCare Pro*.\n\nQuedaste registrado/a correctamente en nuestra clínica. ${doctor}\n\nSi tienes alguna pregunta, escríbenos por aquí. ¡Nos alegra tenerte con nosotros! 🦷`;
+    const url = `https://wa.me/591${tel}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleAgendar = async () => {
+    if (!hora) { setError('Selecciona un horario'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await createCita({
+        paciente_id: paciente.id,
+        doctor_id:   doc?.id || null,
+        fecha,
+        hora,
+        tratamiento: trat || 'Primera consulta',
+        estado:      'confirmada',
+        sucursal_id: form.consultorio,
+      });
+      setCitaOk(true);
+    } catch (err) {
+      console.error(err);
+      setError('No se pudo agendar la cita. Puedes hacerlo desde Agenda.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h2 className="page-title">Paciente registrado</h2>
+          <p className="page-sub">Ahora puedes agendar su primera cita y enviar bienvenida</p>
+        </div>
+      </div>
+
+      {/* Banner éxito */}
+      <div style={{ background: '#F0FDFA', border: '1px solid #A7F3D0', borderRadius: 14, padding: '20px 24px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--dc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icons.CheckCircle size={24} style={{ color: '#fff' }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#134E4A' }}>
+            {paciente.nombre} {paciente.apellidos} fue registrado/a exitosamente
+          </div>
+          <div style={{ fontSize: 13, color: '#0F766E', marginTop: 3 }}>
+            {form.doctor && `Doctor: ${form.doctor} · `}Sucursal {form.consultorio}
+          </div>
+        </div>
+        <button
+          onClick={sendWhatsApp}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}
+        >
+          <Icons.WhatsApp size={16} /> Enviar bienvenida
+        </button>
+      </div>
+
+      {/* Formulario cita */}
+      <Card pad="lg" style={{ marginBottom: 20 }}>
+        {citaOk ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <Icons.CheckCircle size={40} style={{ color: 'var(--dc-positive)', display: 'block', margin: '0 auto 12px' }} />
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#134E4A' }}>Primera cita agendada</div>
+            <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', marginTop: 6 }}>
+              {fecha} a las {hora} — {trat}
+            </div>
+          </div>
+        ) : (
+          <>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600 }}>Agendar primera cita</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--dc-fg-3)' }}>Opcional — también puedes hacerlo desde Agenda</p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+              <Field label="Fecha">
+                <input className="input" type="date" value={fecha} min={today} onChange={e => setFecha(e.target.value)} />
+              </Field>
+              <Field label="Hora">
+                <select className="select" value={hora} onChange={e => setHora(e.target.value)}>
+                  <option value="">Seleccionar hora…</option>
+                  {HORA_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+              <Field label="Tratamiento / motivo" style={{ gridColumn: '1 / -1' }}>
+                <input className="input" value={trat} placeholder="Ej: Primera consulta, limpieza dental…" onChange={e => setTrat(e.target.value)} />
+              </Field>
+            </div>
+
+            {error && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', color: '#DC2626', fontSize: 12, borderRadius: 8, border: '1px solid #FECACA' }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button icon={Icons.Calendar} disabled={saving} onClick={handleAgendar}>
+                {saving ? 'Agendando…' : 'Agendar cita'}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button icon={Icons.Check} onClick={onComplete}>
+          {citaOk ? 'Finalizar →' : 'Finalizar sin cita →'}
+        </Button>
+      </div>
     </div>
   );
 };
@@ -380,9 +562,13 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
   const isDoctor = user?.role === 'doctor';
   const myDoctor = isDoctor ? doctors.find(d => d.id === user.doctorId) : null;
 
-  const [fase,       setFase]       = useState('buscar');
-  const [step,       setStep]       = useState(1);
-  const [form,       setForm]       = useState(() => ({
+  const [fase,          setFase]          = useState('buscar');
+  const [step,          setStep]          = useState(1);
+  const [solicitudId,   setSolicitudId]   = useState(null);
+  const [solicitudFecha,setSolicitudFecha] = useState('');
+  const [solicitudHora, setSolicitudHora]  = useState('');
+  const [savedPatient,  setSavedPatient]  = useState(null);
+  const [form,          setForm]          = useState(() => ({
     ...INIT,
     doctor:      myDoctor?.name        || '',
     consultorio: myDoctor?.consultorio || 'A',
@@ -393,7 +579,6 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
   const [buscandoCI, setBuscandoCI] = useState(false);
   const [ignorarDup, setIgnorarDup] = useState(false);
 
-  // Detección de CI duplicado dentro del formulario
   useEffect(() => {
     if (fase !== 'registrar') return;
     setIgnorarDup(false);
@@ -421,8 +606,12 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
     setSaving(true);
     setError('');
     try {
-      await admitirPaciente(form, doctors);
-      onComplete();
+      const paciente = await admitirPaciente(form, doctors);
+      if (solicitudId) {
+        await updateSolicitudEstado(solicitudId, 'completada').catch(() => {});
+      }
+      setSavedPatient(paciente);
+      setFase('cita');
     } catch (err) {
       console.error(err);
       setError('Error al guardar. Por favor intenta de nuevo.');
@@ -430,18 +619,46 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
     }
   };
 
-  // Fase 0: búsqueda previa
+  // Fase búsqueda
   if (fase === 'buscar') {
     return (
       <BusquedaPrevia
-        onNuevo={() => setFase('registrar')}
+        onNuevo={(prefill) => {
+          if (prefill) {
+            setForm(f => ({
+              ...f,
+              nombre:      prefill.nombre      || f.nombre,
+              apellidos:   prefill.apellidos   || f.apellidos,
+              tel:         prefill.tel         || f.tel,
+              doctor:      prefill.doctorName  || f.doctor,
+            }));
+            setSolicitudId(prefill.solicitudId || null);
+            setSolicitudFecha(prefill.citaFecha || '');
+            setSolicitudHora(prefill.citaHora  || '');
+          }
+          setFase('registrar');
+        }}
         onVerFicha={(id) => { onCancel(); onOpenExisting?.(id); }}
         onCancel={onCancel}
       />
     );
   }
 
-  // Fases 1-3: formulario de registro
+  // Fase cita (después de registrar)
+  if (fase === 'cita' && savedPatient) {
+    return (
+      <FaseCita
+        paciente={savedPatient}
+        form={form}
+        doctors={doctors}
+        solicitudFecha={solicitudFecha}
+        solicitudHora={solicitudHora}
+        onComplete={onComplete}
+      />
+    );
+  }
+
+  // Fases 1–3: formulario de registro
   return (
     <div className="page">
       <div className="page-head">
@@ -460,19 +677,10 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
         {STEPS.map((s, i) => (
           <div key={s.id} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 700, fontSize: 13, flexShrink: 0,
-                background: step > s.id ? 'var(--dc-positive)' : step === s.id ? 'var(--dc-primary)' : 'var(--dc-slate-100)',
-                color: step >= s.id ? '#fff' : 'var(--dc-fg-3)',
-              }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0, background: step > s.id ? 'var(--dc-positive)' : step === s.id ? 'var(--dc-primary)' : 'var(--dc-slate-100)', color: step >= s.id ? '#fff' : 'var(--dc-fg-3)' }}>
                 {step > s.id ? <Icons.Check size={14} /> : s.id}
               </div>
-              <span style={{
-                fontSize: 13, whiteSpace: 'nowrap',
-                fontWeight: step === s.id ? 700 : 500,
-                color: step === s.id ? 'var(--dc-primary)' : step > s.id ? 'var(--dc-positive)' : 'var(--dc-fg-3)',
-              }}>
+              <span style={{ fontSize: 13, whiteSpace: 'nowrap', fontWeight: step === s.id ? 700 : 500, color: step === s.id ? 'var(--dc-primary)' : step > s.id ? 'var(--dc-positive)' : 'var(--dc-fg-3)' }}>
                 {s.label}
               </span>
             </div>
@@ -490,6 +698,7 @@ const Admision = ({ onComplete, onCancel, onOpenExisting, doctors = [], sucursal
             isDoctor={isDoctor} duplicado={duplicado} buscandoCI={buscandoCI}
             ignorarDup={ignorarDup} onIgnorar={() => setIgnorarDup(true)}
             onVerFicha={() => { onCancel(); onOpenExisting?.(duplicado.id); }}
+            solicitudVinculada={!!solicitudId}
           />
         )}
         {step === 2 && <Step2 form={form} onChange={onChange} />}
