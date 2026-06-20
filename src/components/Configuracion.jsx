@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, Card, CardHead, Tabs, Field, Modal, fmtBs } from './ui';
-import { getCatalogo, saveCatalogo, saveDocorComision, createDoctor, deleteDoctor, getPerfiles, updatePerfil, sendPasswordReset } from '../lib/db';
+import { getCatalogo, saveCatalogo, saveDocorComision, createDoctor, updateDoctor, deleteDoctor, getPerfiles, updatePerfil, sendPasswordReset } from '../lib/db';
 
 // ── Tab: Catálogo de precios ──────────────────────────────────────────────────
 const TabCatalogo = () => {
@@ -111,14 +111,15 @@ const PRESET_COLORS = [
 const EMPTY_FORM = { nombre: '', iniciales: '', sucursal_id: 'A', pct: 40, color: '#0D9488' };
 
 const TabDoctores = ({ doctors: doctorsProp = [] }) => {
-  const [doctors, setDoctors]     = useState(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
-  const [saved,   setSaved]       = useState(false);
-  const [saving,  setSaving]      = useState(false);
-  const [modal,   setModal]       = useState(false);
-  const [form,    setForm]        = useState(EMPTY_FORM);
-  const [creating, setCreating]   = useState(false);
-  const [formErr,  setFormErr]    = useState('');
-  const [deleting, setDeleting]   = useState(null);
+  const [doctors,   setDoctors]  = useState(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
+  const [saved,     setSaved]    = useState(false);
+  const [saving,    setSaving]   = useState(false);
+  const [modal,     setModal]    = useState(false);
+  const [editingId, setEditingId]= useState(null); // null = crear, id = editar
+  const [form,      setForm]     = useState(EMPTY_FORM);
+  const [submitting,setSubmitting]= useState(false);
+  const [formErr,   setFormErr]  = useState('');
+  const [deleting,  setDeleting] = useState(null);
 
   useEffect(() => {
     setDoctors(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
@@ -126,6 +127,14 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
 
   const updPct = (id, pct) => setDoctors(prev => prev.map(d => d.id === id ? { ...d, pct } : d));
   const upd    = (k, v)    => setForm(f => ({ ...f, [k]: v }));
+
+  const openCreate = () => { setEditingId(null); setForm(EMPTY_FORM); setFormErr(''); setModal(true); };
+  const openEdit   = (d) => {
+    setEditingId(d.id);
+    setForm({ nombre: d.name, iniciales: d.short, sucursal_id: d.consultorio, pct: d.pct, color: d.color });
+    setFormErr('');
+    setModal(true);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -140,30 +149,40 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
     }
   };
 
-  const handleCreate = async () => {
+  const handleSubmit = async () => {
     if (!form.nombre.trim())    { setFormErr('El nombre es obligatorio.'); return; }
     if (!form.iniciales.trim()) { setFormErr('Las iniciales son obligatorias.'); return; }
-    setCreating(true); setFormErr('');
+    setSubmitting(true); setFormErr('');
+    const payload = {
+      nombre:      form.nombre.trim(),
+      iniciales:   form.iniciales.trim().toUpperCase().slice(0, 3),
+      sucursal_id: form.sucursal_id,
+      comision:    form.pct / 100,
+      color:       form.color,
+    };
     try {
-      const data = await createDoctor({
-        nombre:      form.nombre.trim(),
-        iniciales:   form.iniciales.trim().toUpperCase().slice(0, 3),
-        sucursal_id: form.sucursal_id,
-        comision:    form.pct / 100,
-        color:       form.color,
-      });
-      setDoctors(prev => [...prev, {
-        id: data.id, name: data.nombre, short: data.iniciales,
-        color: data.color, consultorio: data.sucursal_id,
-        comision: Number(data.comision), pct: Math.round(Number(data.comision) * 100),
-      }]);
+      if (editingId) {
+        const data = await updateDoctor(editingId, payload);
+        setDoctors(prev => prev.map(d => d.id === editingId ? {
+          ...d, name: data.nombre, short: data.iniciales,
+          color: data.color, consultorio: data.sucursal_id,
+          comision: Number(data.comision), pct: Math.round(Number(data.comision) * 100),
+        } : d));
+      } else {
+        const data = await createDoctor(payload);
+        setDoctors(prev => [...prev, {
+          id: data.id, name: data.nombre, short: data.iniciales,
+          color: data.color, consultorio: data.sucursal_id,
+          comision: Number(data.comision), pct: Math.round(Number(data.comision) * 100),
+        }]);
+      }
       setModal(false);
       setForm(EMPTY_FORM);
     } catch (err) {
       setFormErr('Error al guardar. Intenta de nuevo.');
       console.error(err);
     } finally {
-      setCreating(false);
+      setSubmitting(false);
     }
   };
 
@@ -194,7 +213,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {saved && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dc-positive)' }}>✓ Guardado</span>}
-          <Button variant="secondary" icon={Icons.Plus} onClick={() => { setForm(EMPTY_FORM); setFormErr(''); setModal(true); }}>
+          <Button variant="secondary" icon={Icons.Plus} onClick={openCreate}>
             Nuevo doctor
           </Button>
           <Button icon={Icons.Check} onClick={handleSave} disabled={saving || doctors.length === 0}>
@@ -208,7 +227,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
         <div style={{ padding: '48px 24px', textAlign: 'center', border: '2px dashed var(--dc-border)', borderRadius: 12 }}>
           <Icons.Users size={32} style={{ color: 'var(--dc-fg-4)', marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: 'var(--dc-fg-3)', margin: '0 0 16px' }}>No hay doctores registrados aún.</p>
-          <Button icon={Icons.Plus} onClick={() => { setForm(EMPTY_FORM); setFormErr(''); setModal(true); }}>
+          <Button icon={Icons.Plus} onClick={openCreate}>
             Agregar primer doctor
           </Button>
         </div>
@@ -225,14 +244,19 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
                   <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Sucursal {d.consultorio}</div>
                 </div>
                 <button
+                  onClick={() => openEdit(d)}
+                  title="Editar doctor"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dc-fg-3)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  <Icons.Edit size={15} />
+                </button>
+                <button
                   onClick={() => handleDelete(d.id)}
                   disabled={deleting === d.id}
                   title="Eliminar doctor"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dc-fg-4)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', flexShrink: 0 }}
                 >
-                  {deleting === d.id
-                    ? <Icons.Clock size={15} />
-                    : <Icons.X size={15} />}
+                  {deleting === d.id ? <Icons.Clock size={15} /> : <Icons.X size={15} />}
                 </button>
               </div>
 
@@ -264,12 +288,12 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
       <Modal
         open={modal}
         onClose={() => setModal(false)}
-        title="Nuevo doctor"
+        title={editingId ? 'Editar doctor' : 'Nuevo doctor'}
         footer={
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
-            <Button icon={Icons.Plus} onClick={handleCreate} disabled={creating}>
-              {creating ? 'Guardando…' : 'Agregar doctor'}
+            <Button icon={editingId ? Icons.Check : Icons.Plus} onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Agregar doctor'}
             </Button>
           </div>
         }

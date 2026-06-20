@@ -52,6 +52,16 @@ export const createDoctor = async ({ nombre, iniciales, sucursal_id, comision, c
   return data;
 };
 
+export const updateDoctor = async (id, { nombre, iniciales, sucursal_id, comision, color }) => {
+  const { data, error } = await supabase
+    .from('doctores')
+    .update({ nombre, iniciales, sucursal_id, comision, color })
+    .eq('id', id)
+    .select().single();
+  if (error) throw error;
+  return data;
+};
+
 export const deleteDoctor = async (id) => {
   const { error } = await supabase.from('doctores').delete().eq('id', id);
   if (error) throw error;
