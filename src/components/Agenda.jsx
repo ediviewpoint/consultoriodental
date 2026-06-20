@@ -97,11 +97,6 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   const [rejectModal, setRejectModal]   = useState(null);
   const [rejectNote, setRejectNote]     = useState('');
 
-  const [waitlist, setWaitlist] = useState([
-    { id: 1, paciente: 'Martín Suarez', urgencia: 'Alta',  tratamiento: 'Dolor Molar',       tel: '78234123', alert: true  },
-    { id: 2, paciente: 'Ana Laura',     urgencia: 'Media', tratamiento: 'Limpieza Dental',    tel: '69123456', alert: false },
-    { id: 3, paciente: 'José Carlos',   urgencia: 'Baja',  tratamiento: 'Control Ortodoncia', tel: '71122334', alert: false },
-  ]);
 
   const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
   const ROW_H = 52;
@@ -465,45 +460,21 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
           )}
 
           <div style={{ background: '#fff', border: '1px solid var(--dc-border)', borderRadius: 12, padding: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Lista de espera</h3>
-                <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 2 }}>{waitlist.length} pacientes</div>
-              </div>
-              <Button size="sm" variant="ghost" icon={Icons.Plus} />
+            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700 }}>Acciones rápidas</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Button variant="secondary" icon={Icons.Plus} style={{ justifyContent: 'flex-start', fontSize: 13 }}
+                onClick={() => setModal(true)}>
+                Nueva cita
+              </Button>
+              {!isDoctor && (
+                <Button variant="secondary" icon={Icons.WhatsApp} style={{ justifyContent: 'flex-start', fontSize: 13 }}
+                  onClick={() => window.open('https://wa.me/591' + (Object.values({}).join('') || ''), '_blank')}>
+                  Recordatorio masivo
+                </Button>
+              )}
             </div>
-
-            {waitlist.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', textAlign: 'center', padding: '20px 0' }}>Lista vacía.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {waitlist.map((w) => (
-                  <div key={w.id} style={{ padding: 12, background: 'var(--dc-slate-50)', borderRadius: 10, border: w.alert ? '1px solid #FECACA' : '1px solid var(--dc-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{w.paciente}</div>
-                      {w.urgencia === 'Alta' && (
-                        <span style={{ fontSize: 10, background: '#FEE2E2', color: '#DC2626', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>URGENTE</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginBottom: 8 }}>{w.tratamiento}</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <Button variant="secondary" size="sm" style={{ flex: 1, fontSize: 11 }}
-                        onClick={() => {
-                          setForm((f) => ({ ...f, patSelect: '__nuevo__', paciente: w.paciente, tratamiento: w.tratamiento }));
-                          setModal(true);
-                        }}>
-                        Agendar
-                      </Button>
-                      <Button variant="secondary" size="sm" icon={Icons.WhatsApp}
-                        onClick={() => window.open(`https://wa.me/591${w.tel}`, '_blank')} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ marginTop: 16, padding: 12, background: '#EFF6FF', borderRadius: 8, fontSize: 11, color: '#1E3A8A', lineHeight: 1.5 }}>
-              <strong>Automatización:</strong> Si un paciente cancela, el sistema notificará al primero de la lista por WhatsApp.
+            <div style={{ marginTop: 14, padding: 10, background: 'var(--dc-slate-50)', borderRadius: 8, fontSize: 11, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
+              Las citas pendientes aparecen en amarillo en el calendario. Haz clic en cualquier cita para ver su detalle.
             </div>
           </div>
         </div>

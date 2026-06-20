@@ -1,72 +1,149 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, Card, CardHead, fmtBs } from './ui';
+import { getCitasCompletadas, getCatalogo } from '../lib/db';
 
-const ALERTA_STYLES = {
-  'sin-recibo':       { bg: '#FEF2F2', border: '#FECACA', color: '#DC2626', label: 'Sin recibo',          Icon: Icons.X             },
-  'precio-bajo':      { bg: '#FFFBEB', border: '#FDE68A', color: '#B45309', label: 'Precio bajo catálogo', Icon: Icons.AlertTriangle },
-  'salto-numeracion': { bg: '#FFF7ED', border: '#FED7AA', color: '#EA580C', label: 'Salto en numeración',  Icon: Icons.AlertCircle   },
+const pad = n => String(n).padStart(2, '0');
+const MON_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+const buildPeriodos = () => {
+  const result = [];
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth();
+  let isSecond = now.getDate() >= 16;
+  for (let i = 0; i < 8; i++) {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const start = isSecond ? `${year}-${pad(month+1)}-16` : `${year}-${pad(month+1)}-01`;
+    const end   = isSecond ? `${year}-${pad(month+1)}-${pad(lastDay)}` : `${year}-${pad(month+1)}-15`;
+    const label = isSecond
+      ? `16–${lastDay} ${MON_ES[month]} ${year}`
+      : `1–15 ${MON_ES[month]} ${year}`;
+    result.push({ id: `${year}-${month+1}-${isSecond?2:1}`, label, start, end, year, month, isSecond });
+    if (isSecond) { isSecond = false; }
+    else { isSecond = true; month--; if (month < 0) { month = 11; year--; } }
+  }
+  return result;
 };
 
-const PERIODOS = [
-  { id: 'q1', label: '1–15 jun 2025'  },
-  { id: 'q2', label: '16–30 jun 2025' },
-];
+const PERIODOS = buildPeriodos();
 
-const Liquidacion = ({ user }) => {
-  const [doctorId, setDoctorId] = useState(user?.role === 'doctor' ? user.doctorId : 'r');
-  const [periodo,  setPeriodo]  = useState('q1');
+const fmtFecha = iso =>
+  new Date(iso + 'T00:00:00').toLocaleDateString('es-BO', { day: 'numeric', month: 'short' });
 
-  // Si el usuario es un doctor, forzar su ID
+const Liquidacion = ({ user, doctors = [] }) => {
+  const isDoctor = user?.role === 'doctor';
+
+  const [periodoIdx, setPeriodoIdx] = useState(0);
+  const [doctorId, setDoctorId]     = useState(
+    isDoctor ? user?.doctorId : (doctors[0]?.id ?? null)
+  );
+  const [citas, setCitas]       = useState([]);
+  const [catalogo, setCatalogo] = useState([]);
+  const [loading, setLoading]   = useState(false);
+
   useEffect(() => {
-    if (user?.role === 'doctor') {
-      setDoctorId(user.doctorId);
-    }
-  }, [user]);
+    getCatalogo().then(setCatalogo).catch(console.error);
+  }, []);
 
-  const doctor = DC_DATA.DOCTORS.find(d => d.id === doctorId) || DC_DATA.DOCTORS[0] || { name: '—', short: '—', color: '#94A3B8', comision: 0, id: doctorId };
-  const rows   = DC_DATA.LIQUIDACION_SAMPLE.rows.filter(r => r.doctorId === doctorId);
+  useEffect(() => {
+    if (isDoctor) setDoctorId(user?.doctorId);
+  }, [user, isDoctor]);
+
+  useEffect(() => {
+    if (!isDoctor && doctors.length && !doctorId) {
+      setDoctorId(doctors[0].id);
+    }
+  }, [doctors, isDoctor, doctorId]);
+
+  const periodo = PERIODOS[periodoIdx];
+
+  useEffect(() => {
+    if (!periodo) return;
+    const target = isDoctor ? user?.doctorId : doctorId;
+    setLoading(true);
+    getCitasCompletadas(periodo.start, periodo.end, target || null)
+      .then(setCitas)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [periodoIdx, doctorId, user?.doctorId, isDoctor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const doctor = isDoctor
+    ? doctors.find(d => d.id === user?.doctorId)
+    : doctors.find(d => d.id === doctorId);
+
+  const rows = citas.map(c => {
+    const cat          = catalogo.find(t => t.tratamiento === c.tratamiento) || { precio: 0, material: 0 };
+    const docComision  = doctor?.comision ?? Number(c.doctores?.comision ?? 0);
+    const precioBase   = Number(cat.precio);
+    const material     = Number(cat.material);
+    const comisionable = Math.max(0, precioBase - material);
+    const comision     = Math.round(comisionable * docComision);
+    return { id: c.id, fecha: c.fecha, paciente: c.paciente_nombre, tratamiento: c.tratamiento, precioBase, material, comisionable, comision };
+  });
 
   const totalBruto    = rows.reduce((s, r) => s + r.precioBase,    0);
   const totalBase     = rows.reduce((s, r) => s + r.comisionable,  0);
   const totalComision = rows.reduce((s, r) => s + r.comision,      0);
-  const alertCount    = rows.filter(r => r.alerta).length;
-  const sinRecibo     = rows.filter(r => r.alerta === 'sin-recibo').length;
+  const docColor      = doctor?.color || 'var(--dc-primary)';
+  const pct           = Math.round((doctor?.comision ?? 0) * 100);
+
+  // Resumen global por doctor (solo admin, período actual)
+  const resumenDoctores = !isDoctor ? doctors.map(d => {
+    const dc = catalogo;
+    const citasDoc = citas.filter(c => c.doctor_id === d.id || c.doctores?.nombre === d.name);
+    const comTotal = citasDoc.reduce((s, c) => {
+      const cat = dc.find(t => t.tratamiento === c.tratamiento) || { precio: 0, material: 0 };
+      return s + Math.round(Math.max(0, Number(cat.precio) - Number(cat.material)) * d.comision);
+    }, 0);
+    return { ...d, citasCount: citasDoc.length, comTotal };
+  }) : [];
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h2 className="page-title">{user?.role === 'doctor' ? 'Mis Ingresos y Liquidación' : 'Liquidación quincenal'}</h2>
-          <p className="page-sub">Control de caja central · anti-fuga de ingresos</p>
+          <h2 className="page-title">{isDoctor ? 'Mis Ingresos' : 'Liquidación quincenal'}</h2>
+          <p className="page-sub">
+            {periodo?.label}
+            {doctor ? ` · ${doctor.name}` : ''}
+          </p>
         </div>
-        <Button variant="secondary" icon={Icons.Download}>Exportar PDF</Button>
+        <Button variant="secondary" icon={Icons.Download} onClick={() => window.print()}>
+          Exportar PDF
+        </Button>
       </div>
 
-      {/* Filtros */}
+      {/* Selector de período */}
       <Card style={{ marginBottom: 20 }}>
-        <div style={{ padding: '14px 18px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--dc-fg-3)', marginBottom: 8 }}>Período</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {PERIODOS.map(p => (
-                <button key={p.id} onClick={() => setPeriodo(p.id)} style={{
-                  padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                  border: `1.5px solid ${periodo === p.id ? 'var(--dc-primary)' : 'var(--dc-border)'}`,
-                  background: periodo === p.id ? 'var(--dc-primary)' : '#fff',
-                  color: periodo === p.id ? '#fff' : 'var(--dc-fg-2)',
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--dc-fg-3)', marginBottom: 10 }}>
+              Período
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {PERIODOS.map((p, i) => (
+                <button key={p.id} onClick={() => setPeriodoIdx(i)} style={{
+                  padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  border: `1.5px solid ${periodoIdx === i ? 'var(--dc-primary)' : 'var(--dc-border)'}`,
+                  background: periodoIdx === i ? 'var(--dc-primary)' : '#fff',
+                  color: periodoIdx === i ? '#fff' : 'var(--dc-fg-2)',
+                  opacity: i === 0 ? 1 : i < 4 ? 0.9 : 0.7,
                 }}>
-                  {p.label}
+                  {i === 0 ? '★ ' : ''}{p.label}
                 </button>
               ))}
             </div>
           </div>
-          {user?.role !== 'doctor' && (
+
+          {!isDoctor && (
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--dc-fg-3)', marginBottom: 8 }}>Doctor</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {DC_DATA.DOCTORS.map(d => (
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--dc-fg-3)', marginBottom: 10 }}>
+                Doctor
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {doctors.map(d => (
                   <button key={d.id} onClick={() => setDoctorId(d.id)} style={{
                     padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
                     border: `1.5px solid ${doctorId === d.id ? d.color : 'var(--dc-border)'}`,
@@ -82,142 +159,178 @@ const Liquidacion = ({ user }) => {
         </div>
       </Card>
 
-      {/* Banner irregularidades */}
-      {alertCount > 0 && user?.role !== 'doctor' && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Icons.AlertCircle size={20} style={{ color: '#DC2626', flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <span style={{ fontWeight: 700, fontSize: 14, color: '#DC2626' }}>
-              {alertCount} irregularidad{alertCount > 1 ? 'es' : ''} detectada{alertCount > 1 ? 's' : ''}
-            </span>
-            {sinRecibo > 0 && (
-              <span style={{ fontSize: 12, color: '#B91C1C', marginLeft: 10 }}>
-                {sinRecibo} sin recibo · resuelve antes de liquidar
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* KPI cards */}
+      {/* KPIs */}
       <div className="metric-grid" style={{ marginBottom: 20 }}>
         <Card className="metric-card">
-          <div className="icon-pill"><Icons.Wallet size={18} /></div>
+          <div className="icon-pill" style={{ background: 'rgba(16,185,129,0.14)', color: '#047857' }}>
+            <Icons.Wallet size={18} />
+          </div>
           <div className="eyebrow">Total bruto</div>
-          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>{fmtBs(totalBruto)}</div>
-          <div className="delta">{rows.length} tratamientos</div>
+          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>
+            {loading ? '…' : fmtBs(totalBruto)}
+          </div>
+          <div className="delta">{rows.length} citas completadas</div>
         </Card>
+
         <Card className="metric-card">
-          <div className="icon-pill" style={{ background: `${doctor.color}22`, color: doctor.color }}>
+          <div className="icon-pill" style={{ background: `${docColor}22`, color: docColor }}>
             <Icons.TrendUp size={18} />
           </div>
           <div className="eyebrow">Base comisionable</div>
-          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>{fmtBs(totalBase)}</div>
+          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>
+            {loading ? '…' : fmtBs(totalBase)}
+          </div>
           <div className="delta">precio − material</div>
         </Card>
+
         <Card className="metric-card">
-          <div className="icon-pill" style={{ background: `${doctor.color}22`, color: doctor.color }}>
+          <div className="icon-pill" style={{ background: `${docColor}22`, color: docColor }}>
             <Icons.Receipt size={18} />
           </div>
-          <div className="eyebrow">{user?.role === 'doctor' ? 'Mi Comisión' : `Comisión ${doctor.name.split(' ').slice(-1)[0]}`}</div>
-          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)', color: doctor.color }}>{fmtBs(totalComision)}</div>
-          <div className="delta">{Math.round(doctor.comision * 100)}% sobre base</div>
+          <div className="eyebrow">
+            {isDoctor ? 'Mi comisión' : `Comisión ${doctor?.name?.split(' ').slice(-1)[0] ?? ''}`}
+          </div>
+          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)', color: docColor }}>
+            {loading ? '…' : fmtBs(totalComision)}
+          </div>
+          <div className="delta">{pct}% sobre base</div>
         </Card>
-        
-        {user?.role !== 'doctor' && (
-          <Card className="metric-card">
-            <div className="icon-pill" style={{ background: alertCount > 0 ? 'rgba(220,38,38,0.14)' : 'rgba(16,185,129,0.14)', color: alertCount > 0 ? '#B91C1C' : '#047857' }}>
-              <Icons.AlertCircle size={18} />
-            </div>
-            <div className="eyebrow">Alertas</div>
-            <div className="value" style={{ color: alertCount > 0 ? 'var(--dc-alert)' : 'var(--dc-positive)' }}>
-              {alertCount > 0 ? alertCount : '✓'}
-            </div>
-            <div className={`delta ${alertCount > 0 ? 'down' : ''}`}>
-              {alertCount > 0 ? `${sinRecibo} sin recibo` : 'Todo en orden'}
-            </div>
-          </Card>
-        )}
+
+        <Card className="metric-card">
+          <div className="icon-pill" style={{ background: 'rgba(59,130,246,0.14)', color: '#1D4ED8' }}>
+            <Icons.CheckCircle size={18} />
+          </div>
+          <div className="eyebrow">Promedio por cita</div>
+          <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>
+            {rows.length > 0 ? fmtBs(Math.round(totalComision / rows.length)) : '—'}
+          </div>
+          <div className="delta">comisión / cita</div>
+        </Card>
       </div>
 
-      {/* Tabla */}
-      <Card flush>
-        <CardHead title={`Detalle · ${doctor.name} · ${PERIODOS.find(p => p.id === periodo)?.label}`} />
-        <div style={{ overflowX: 'auto' }}>
+      {/* Resumen de todos los doctores (solo admin, cuando se cargan todas las citas) */}
+      {!isDoctor && !doctorId && resumenDoctores.length > 0 && (
+        <Card flush style={{ marginBottom: 20 }}>
+          <CardHead title={`Resumen por doctor · ${periodo?.label}`} />
           <table className="table">
             <thead>
               <tr>
-                <th>Fecha</th>
-                <th>Paciente</th>
-                <th>Tratamiento</th>
-                <th style={{ textAlign: 'right' }}>Precio</th>
-                <th style={{ textAlign: 'right' }}>Material</th>
-                <th style={{ textAlign: 'right' }}>Comisionable</th>
-                <th style={{ textAlign: 'right' }}>Comisión</th>
-                <th>Recibo en Caja</th>
+                <th>Doctor</th>
+                <th style={{ textAlign: 'right' }}>Citas</th>
+                <th style={{ textAlign: 'right' }}>Comisión %</th>
+                <th style={{ textAlign: 'right' }}>A pagar</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
-                const al = r.alerta && user?.role !== 'doctor' ? ALERTA_STYLES[r.alerta] : null;
-                return (
-                  <tr key={r.id} style={al ? { background: al.bg } : {}}>
-                    <td style={{ fontFamily: 'var(--dc-font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{r.fecha}</td>
-                    <td style={{ fontWeight: 500 }}>{r.paciente}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span>{r.tratamiento}</span>
-                        {al && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: al.bg, color: al.color, border: `1px solid ${al.border}`, flexShrink: 0 }}>
-                            <al.Icon size={10} />{al.label}
-                          </span>
-                        )}
-                      </div>
+              {resumenDoctores.map(d => (
+                <tr key={d.id} onClick={() => setDoctorId(d.id)} style={{ cursor: 'pointer' }}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: d.color }} />
+                      <span style={{ fontWeight: 600 }}>{d.name}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{d.citasCount}</td>
+                  <td style={{ textAlign: 'right' }}>{Math.round(d.comision * 100)}%</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: d.color, fontFamily: 'var(--dc-font-mono)' }}>
+                    {fmtBs(d.comTotal)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Tabla de detalle */}
+      <Card flush>
+        <CardHead
+          title={doctor
+            ? `Detalle · ${doctor.name} · ${periodo?.label}`
+            : `Detalle · ${periodo?.label}`}
+        />
+        <div style={{ overflowX: 'auto' }}>
+          {loading ? (
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--dc-fg-3)', fontSize: 14 }}>
+              Cargando…
+            </div>
+          ) : rows.length === 0 ? (
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--dc-fg-3)', fontSize: 14 }}>
+              No hay citas completadas en este período.
+            </div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Paciente</th>
+                  <th>Tratamiento</th>
+                  <th style={{ textAlign: 'right' }}>Precio</th>
+                  <th style={{ textAlign: 'right' }}>Material</th>
+                  <th style={{ textAlign: 'right' }}>Comisionable</th>
+                  <th style={{ textAlign: 'right' }}>Comisión</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ fontFamily: 'var(--dc-font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      {fmtFecha(r.fecha)}
                     </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13 }}>{fmtBs(r.precioBase)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, color: 'var(--dc-fg-3)' }}>{fmtBs(r.material)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, fontWeight: 600 }}>{fmtBs(r.comisionable)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, fontWeight: 700, color: doctor.color }}>{fmtBs(r.comision)}</td>
-                    <td>
-                      {r.recibo
-                        ? <span style={{ fontSize: 11, fontFamily: 'var(--dc-font-mono)', color: 'var(--dc-positive)', fontWeight: 600 }}>{r.recibo}</span>
-                        : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#DC2626', fontWeight: 600 }}><Icons.X size={11} />sin recibo</span>
-                      }
+                    <td style={{ fontWeight: 500 }}>{r.paciente}</td>
+                    <td>{r.tratamiento}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13 }}>
+                      {fmtBs(r.precioBase)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, color: 'var(--dc-fg-3)' }}>
+                      {fmtBs(r.material)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, fontWeight: 600 }}>
+                      {fmtBs(r.comisionable)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontSize: 13, fontWeight: 700, color: docColor }}>
+                      {fmtBs(r.comision)}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '2px solid var(--dc-border-strong)' }}>
-                <td colSpan={3} style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13 }}>TOTAL</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 700 }}>{fmtBs(totalBruto)}</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--dc-fg-3)' }}>—</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 700 }}>{fmtBs(totalBase)}</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 800, fontSize: 16, color: doctor.color }}>{fmtBs(totalComision)}</td>
-                <td style={{ padding: '12px 16px' }}>
-                  {alertCount > 0 && user?.role !== 'doctor' && <span style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{alertCount} alerta{alertCount > 1 ? 's' : ''}</span>}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid var(--dc-border-strong)' }}>
+                  <td colSpan={3} style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13 }}>TOTAL</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 700 }}>
+                    {fmtBs(totalBruto)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--dc-fg-3)' }}>—</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 700 }}>
+                    {fmtBs(totalBase)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--dc-font-mono)', fontWeight: 800, fontSize: 16, color: docColor }}>
+                    {fmtBs(totalComision)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
         </div>
       </Card>
 
-      {/* Acción liquidar (Solo Admin) */}
-      {user?.role === 'admin' && (
+      {/* Acción liquidar */}
+      {user?.role === 'admin' && rows.length > 0 && (
         <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <Button variant="secondary" icon={Icons.Download}>Exportar liquidación</Button>
-          <Button icon={Icons.Check} disabled={alertCount > 0}>
-            {alertCount > 0 ? `Resolver ${alertCount} alerta${alertCount > 1 ? 's' : ''} para liquidar` : 'Aprobar y liquidar'}
+          <Button variant="secondary" icon={Icons.Download} onClick={() => window.print()}>
+            Exportar liquidación
+          </Button>
+          <Button icon={Icons.Check}>
+            Marcar quincena como liquidada
           </Button>
         </div>
       )}
-      
-      {/* Acción descargar (Doctor) */}
-      {user?.role === 'doctor' && (
-        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <Button variant="secondary" icon={Icons.Download}>Descargar detalle</Button>
+
+      {user?.role === 'doctor' && rows.length > 0 && (
+        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="secondary" icon={Icons.Download} onClick={() => window.print()}>
+            Descargar detalle
+          </Button>
         </div>
       )}
     </div>

@@ -194,6 +194,20 @@ export const updateCitaEstado = async (id, estado) => {
   if (error) throw error;
 };
 
+export const getCitasCompletadas = async (startDate, endDate, doctorId = null) => {
+  let q = supabase
+    .from('citas')
+    .select('*, doctores(nombre, comision, iniciales, color)')
+    .eq('estado', 'completada')
+    .gte('fecha', startDate)
+    .lte('fecha', endDate)
+    .order('fecha', { ascending: true });
+  if (doctorId) q = q.eq('doctor_id', doctorId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+};
+
 // ── Solicitudes ───────────────────────────────────────────────────
 export const getSolicitudesPendientes = async (doctorId = null) => {
   let q = supabase

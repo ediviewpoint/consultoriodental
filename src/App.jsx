@@ -177,7 +177,7 @@ const App = () => {
         {screen === 'reportes'      && <Reportes consultorio={consultorio} />}
         {screen === 'configuracion' && <Configuracion sucursales={sucursales} onSaveSucursales={handleSaveSucursales} doctors={doctors} user={currentUser} />}
         {screen === 'presupuestos'  && <Presupuestos />}
-        {screen === 'liquidacion'   && <Liquidacion consultorio={consultorio} user={currentUser} />}
+        {screen === 'liquidacion'   && <Liquidacion consultorio={consultorio} user={currentUser} doctors={doctors} />}
         {screen === 'admision'      && <Admision onComplete={() => navigate('pacientes')} onCancel={() => navigate('pacientes')} onOpenExisting={openPatient} doctors={doctors} sucursales={sucursales} user={currentUser} />}
       </div>
     </div>
