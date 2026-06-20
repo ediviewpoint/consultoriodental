@@ -43,6 +43,20 @@ export const saveDocorComision = async (id, comision) => {
   if (error) throw error;
 };
 
+export const createDoctor = async ({ nombre, iniciales, sucursal_id, comision, color }) => {
+  const { data, error } = await supabase
+    .from('doctores')
+    .insert({ nombre, iniciales, sucursal_id, comision, color })
+    .select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const deleteDoctor = async (id) => {
+  const { error } = await supabase.from('doctores').delete().eq('id', id);
+  if (error) throw error;
+};
+
 // ── Catálogo ──────────────────────────────────────────────────────
 export const getCatalogo = async () => {
   const { data, error } = await supabase

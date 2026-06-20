@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import DC_DATA from './data';
 import { Icons } from './icons';
-import { Button, Card, CardHead, Tabs, Field, fmtBs } from './ui';
-import { getCatalogo, saveCatalogo, saveDocorComision, getPerfiles, updatePerfil, sendPasswordReset } from '../lib/db';
+import { Button, Card, CardHead, Tabs, Field, Modal, fmtBs } from './ui';
+import { getCatalogo, saveCatalogo, saveDocorComision, createDoctor, deleteDoctor, getPerfiles, updatePerfil, sendPasswordReset } from '../lib/db';
 
 // ── Tab: Catálogo de precios ──────────────────────────────────────────────────
 const TabCatalogo = () => {
@@ -103,18 +103,29 @@ const TabCatalogo = () => {
 };
 
 // ── Tab: Doctores y comisiones ───────────────────────────────────────────────
+const PRESET_COLORS = [
+  '#0D9488', '#3B82F6', '#8B5CF6', '#F59E0B',
+  '#EF4444', '#10B981', '#FB923C', '#EC4899',
+];
+
+const EMPTY_FORM = { nombre: '', iniciales: '', sucursal_id: 'A', pct: 40, color: '#0D9488' };
+
 const TabDoctores = ({ doctors: doctorsProp = [] }) => {
-  const [doctors, setDoctors] = useState(
-    doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) }))
-  );
-  const [saved, setSaved]   = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [doctors, setDoctors]     = useState(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
+  const [saved,   setSaved]       = useState(false);
+  const [saving,  setSaving]      = useState(false);
+  const [modal,   setModal]       = useState(false);
+  const [form,    setForm]        = useState(EMPTY_FORM);
+  const [creating, setCreating]   = useState(false);
+  const [formErr,  setFormErr]    = useState('');
+  const [deleting, setDeleting]   = useState(null);
 
   useEffect(() => {
     setDoctors(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
   }, [doctorsProp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updPct = (id, pct) => setDoctors(prev => prev.map(d => d.id === id ? { ...d, pct } : d));
+  const upd    = (k, v)    => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -129,10 +140,51 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
     }
   };
 
+  const handleCreate = async () => {
+    if (!form.nombre.trim())    { setFormErr('El nombre es obligatorio.'); return; }
+    if (!form.iniciales.trim()) { setFormErr('Las iniciales son obligatorias.'); return; }
+    setCreating(true); setFormErr('');
+    try {
+      const data = await createDoctor({
+        nombre:      form.nombre.trim(),
+        iniciales:   form.iniciales.trim().toUpperCase().slice(0, 3),
+        sucursal_id: form.sucursal_id,
+        comision:    form.pct / 100,
+        color:       form.color,
+      });
+      setDoctors(prev => [...prev, {
+        id: data.id, name: data.nombre, short: data.iniciales,
+        color: data.color, consultorio: data.sucursal_id,
+        comision: Number(data.comision), pct: Math.round(Number(data.comision) * 100),
+      }]);
+      setModal(false);
+      setForm(EMPTY_FORM);
+    } catch (err) {
+      setFormErr('Error al guardar. Intenta de nuevo.');
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Eliminar este doctor? Esta acción no se puede deshacer.')) return;
+    setDeleting(id);
+    try {
+      await deleteDoctor(id);
+      setDoctors(prev => prev.filter(d => d.id !== id));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const EJ_BASE = 530;
 
   return (
     <div>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Doctores y comisiones</h3>
@@ -142,24 +194,46 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {saved && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dc-positive)' }}>✓ Guardado</span>}
-          <Button icon={Icons.Check} onClick={handleSave} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Button>
+          <Button variant="secondary" icon={Icons.Plus} onClick={() => { setForm(EMPTY_FORM); setFormErr(''); setModal(true); }}>
+            Nuevo doctor
+          </Button>
+          <Button icon={Icons.Check} onClick={handleSave} disabled={saving || doctors.length === 0}>
+            {saving ? 'Guardando…' : 'Guardar comisiones'}
+          </Button>
         </div>
       </div>
 
+      {/* Lista de doctores */}
       {doctors.length === 0 ? (
-        <div style={{ padding: 32, textAlign: 'center', color: 'var(--dc-fg-3)', fontSize: 13 }}>Cargando doctores…</div>
+        <div style={{ padding: '48px 24px', textAlign: 'center', border: '2px dashed var(--dc-border)', borderRadius: 12 }}>
+          <Icons.Users size={32} style={{ color: 'var(--dc-fg-4)', marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: 'var(--dc-fg-3)', margin: '0 0 16px' }}>No hay doctores registrados aún.</p>
+          <Button icon={Icons.Plus} onClick={() => { setForm(EMPTY_FORM); setFormErr(''); setModal(true); }}>
+            Agregar primer doctor
+          </Button>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           {doctors.map(d => (
             <Card key={d.id} pad="lg">
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${d.color}22`, color: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${d.color}22`, color: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
                   {d.short}
                 </div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{d.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Suc. {d.consultorio}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Sucursal {d.consultorio}</div>
                 </div>
+                <button
+                  onClick={() => handleDelete(d.id)}
+                  disabled={deleting === d.id}
+                  title="Eliminar doctor"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dc-fg-4)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  {deleting === d.id
+                    ? <Icons.Clock size={15} />
+                    : <Icons.X size={15} />}
+                </button>
               </div>
 
               <div style={{ marginBottom: 14 }}>
@@ -178,13 +252,106 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
               </div>
 
               <div style={{ background: 'var(--dc-slate-50)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--dc-fg-2)' }}>
-                Ejemplo · Endodoncia Bs. 650 − mat. Bs. 120 = base Bs. {EJ_BASE} →{' '}
+                Ejemplo · base Bs. {EJ_BASE} →{' '}
                 <strong style={{ color: d.color }}>Bs. {Math.round(EJ_BASE * d.pct / 100)}</strong>
               </div>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Modal nuevo doctor */}
+      <Modal
+        open={modal}
+        onClose={() => setModal(false)}
+        title="Nuevo doctor"
+        footer={
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <Button variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
+            <Button icon={Icons.Plus} onClick={handleCreate} disabled={creating}>
+              {creating ? 'Guardando…' : 'Agregar doctor'}
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          <Field label="Nombre completo *">
+            <input
+              className="input"
+              value={form.nombre}
+              onChange={e => { upd('nombre', e.target.value); setFormErr(''); }}
+              placeholder="Ej: Dra. María López"
+              autoFocus
+            />
+          </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <Field label="Iniciales * (máx. 3)">
+              <input
+                className="input"
+                value={form.iniciales}
+                onChange={e => { upd('iniciales', e.target.value.slice(0, 3)); setFormErr(''); }}
+                placeholder="Ej: ML"
+                style={{ fontFamily: 'var(--dc-font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}
+              />
+            </Field>
+            <Field label="Sucursal">
+              <select className="select" value={form.sucursal_id} onChange={e => upd('sucursal_id', e.target.value)}>
+                <option value="A">Sucursal A</option>
+                <option value="B">Sucursal B</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label={`Comisión: ${form.pct}%`}>
+            <input
+              type="range" min="0" max="60" step="1" value={form.pct}
+              onChange={e => upd('pct', Number(e.target.value))}
+              style={{ width: '100%', accentColor: form.color, marginTop: 4 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dc-fg-4)', marginTop: 2 }}>
+              <span>0%</span><span>30%</span><span>60%</span>
+            </div>
+          </Field>
+
+          <Field label="Color de identificación">
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+              {PRESET_COLORS.map(c => (
+                <button
+                  key={c}
+                  onClick={() => upd('color', c)}
+                  style={{
+                    width: 32, height: 32, borderRadius: 8, background: c, border: 'none',
+                    cursor: 'pointer', flexShrink: 0,
+                    outline: form.color === c ? `3px solid ${c}` : '3px solid transparent',
+                    outlineOffset: 2,
+                    transform: form.color === c ? 'scale(1.15)' : 'scale(1)',
+                    transition: 'all 0.12s',
+                  }}
+                />
+              ))}
+            </div>
+          </Field>
+
+          {/* Preview */}
+          <div style={{ background: 'var(--dc-slate-50)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${form.color}22`, color: form.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
+              {form.iniciales.toUpperCase() || '??'}
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--dc-fg-1)' }}>{form.nombre || 'Nombre del doctor'}</div>
+              <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Suc. {form.sucursal_id} · Comisión {form.pct}%</div>
+            </div>
+          </div>
+
+          {formErr && (
+            <div style={{ fontSize: 13, color: '#DC2626', padding: '8px 12px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA' }}>
+              {formErr}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };
