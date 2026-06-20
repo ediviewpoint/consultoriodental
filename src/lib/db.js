@@ -194,6 +194,20 @@ export const updateCitaEstado = async (id, estado) => {
   if (error) throw error;
 };
 
+export const getCitasHistorial = async (startDate, endDate, doctorId) => {
+  const { data, error } = await supabase
+    .from('citas')
+    .select('*, doctores(nombre)')
+    .eq('doctor_id', doctorId)
+    .gte('fecha', startDate)
+    .lte('fecha', endDate)
+    .neq('estado', 'cancelada')
+    .order('fecha', { ascending: false })
+    .order('hora', { ascending: true });
+  if (error) throw error;
+  return data || [];
+};
+
 export const getCitasCompletadas = async (startDate, endDate, doctorId = null) => {
   let q = supabase
     .from('citas')

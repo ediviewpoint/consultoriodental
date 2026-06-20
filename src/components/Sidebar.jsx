@@ -27,10 +27,13 @@ const getSectionsForRole = (role) => {
   ];
 
   if (role === 'doctor') {
-    // Doctors don't see cobros, reportes, or configuracion
     return allSections.map(sec => ({
       ...sec,
-      items: sec.items.filter(it => !['cobros', 'reportes', 'configuracion', 'presupuestos'].includes(it.id))
+      items: sec.items
+        .filter(it => !['cobros', 'reportes', 'configuracion', 'presupuestos'].includes(it.id))
+        .map(it => it.id === 'liquidacion'
+          ? { ...it, label: 'Mis Citas', icon: Icons.CheckCircle }
+          : it),
     })).filter(sec => sec.items.length > 0);
   }
 
