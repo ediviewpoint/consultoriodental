@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DC_DATA from './data';
 import { Icons } from './icons';
+import Particles from './reactbits/Particles';
+import BlurText  from './reactbits/BlurText';
+import CountUp   from './reactbits/CountUp';
+import Magnet    from './reactbits/Magnet';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURA TU CONTENIDO AQUÍ
@@ -73,21 +77,6 @@ const useScrollReveal = (threshold = 0.12) => {
   return [ref, vis];
 };
 
-const useCounter = (target, active, duration = 1400) => {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    let start = null;
-    const step = (ts) => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / duration, 1);
-      setN(Math.floor(p * target));
-      if (p < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [active, target, duration]);
-  return n;
-};
 
 // ── Componentes pequeños ──────────────────────────────────────────────────────
 
@@ -119,17 +108,14 @@ const RevealDiv = ({ children, delay = 0, style = {}, className = '' }) => {
   );
 };
 
-const StatCounter = ({ value, suffix, label, active }) => {
-  const n = useCounter(value, active);
-  return (
-    <div style={{ textAlign: 'center', padding: '12px 16px' }}>
-      <div style={{ fontSize: 'clamp(34px,4.5vw,52px)', fontWeight: 800, color: '#5EEAD4', letterSpacing: '-0.03em', lineHeight: 1 }}>
-        {n}{suffix}
-      </div>
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 7, fontWeight: 500 }}>{label}</div>
+const StatCounter = ({ value, suffix, label }) => (
+  <div style={{ textAlign: 'center', padding: '12px 16px' }}>
+    <div style={{ fontSize: 'clamp(34px,4.5vw,52px)', fontWeight: 800, color: '#5EEAD4', letterSpacing: '-0.03em', lineHeight: 1 }}>
+      <CountUp to={value} duration={2} />{suffix}
     </div>
-  );
-};
+    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 7, fontWeight: 500 }}>{label}</div>
+  </div>
+);
 
 // ── Landing principal ─────────────────────────────────────────────────────────
 
@@ -138,7 +124,7 @@ const Landing = ({ onNavigate }) => {
   const sucKeys  = Object.keys(suc);
   const [scrolled, setScrolled]       = useState(false);
   const [hService, setHService]       = useState(null);
-  const [statsRef, statsVis]          = useScrollReveal(0.3);
+  const statsRef = useRef(null);
   const [menuOpen, setMenuOpen]       = useState(false);
 
   useEffect(() => {
@@ -269,6 +255,19 @@ const Landing = ({ onNavigate }) => {
         )}
         {(HERO_VIDEO || HERO_IMAGE) && <div style={{ position: 'absolute', inset: 0, background: 'rgba(4,47,46,0.68)' }} />}
 
+        {/* Partículas WebGL */}
+        <Particles
+          particleCount={160}
+          particleSpread={12}
+          speed={0.06}
+          particleColors={['#5EEAD4','#A7F3D0','#ffffff','#CCFBF1']}
+          alphaParticles
+          particleBaseSize={80}
+          sizeRandomness={1.2}
+          moveParticlesOnHover
+          particleHoverFactor={0.4}
+        />
+
         {/* Decoraciones flotantes */}
         <div className="float-a" style={{ position: 'absolute', top: '10%', right: '6%',  width: 130, height: 130, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
         <div className="float-b" style={{ position: 'absolute', top: '28%', right: '12%', width: 70,  height: 70,  borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
@@ -289,10 +288,13 @@ const Landing = ({ onNavigate }) => {
             </div>
 
             <h1 className="hero-2" style={{ fontSize: 'clamp(38px, 5.5vw, 66px)', fontWeight: 800, color: '#fff', lineHeight: 1.06, letterSpacing: '-0.03em', margin: '0 0 22px' }}>
-              Tu sonrisa en las{' '}
-              <span style={{ background: 'linear-gradient(135deg,#5EEAD4,#A7F3D0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                mejores manos.
-              </span>
+              <BlurText
+                text="Tu sonrisa en las mejores manos."
+                delay={90}
+                direction="top"
+                stepDuration={0.4}
+                style={{ fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit', letterSpacing: 'inherit', lineHeight: 'inherit', flexWrap: 'wrap' }}
+              />
             </h1>
 
             <p className="hero-3" style={{ fontSize: 'clamp(15px, 2vw, 19px)', color: 'rgba(255,255,255,0.72)', maxWidth: 500, margin: '0 0 40px', lineHeight: 1.65 }}>
@@ -300,12 +302,16 @@ const Landing = ({ onNavigate }) => {
             </p>
 
             <div className="hero-4" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 40 }}>
-              <button className="cta-pulse" onClick={() => onNavigate('booking')} style={{ padding: '15px 34px', borderRadius: 999, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#0D9488,#0F766E)', color: '#fff', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 9, letterSpacing: '-0.01em' }}>
-                <Icons.Calendar size={18} /> Agendar cita ahora
-              </button>
-              <button onClick={() => scrollTo('servicios')} style={{ padding: '15px 28px', borderRadius: 999, cursor: 'pointer', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1.5px solid rgba(255,255,255,0.28)', color: '#fff', fontSize: 15, fontWeight: 600 }}>
-                Ver servicios ↓
-              </button>
+              <Magnet magnetStrength={3} padding={60}>
+                <button className="cta-pulse" onClick={() => onNavigate('booking')} style={{ padding: '15px 34px', borderRadius: 999, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#0D9488,#0F766E)', color: '#fff', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 9, letterSpacing: '-0.01em' }}>
+                  <Icons.Calendar size={18} /> Agendar cita ahora
+                </button>
+              </Magnet>
+              <Magnet magnetStrength={3} padding={60}>
+                <button onClick={() => scrollTo('servicios')} style={{ padding: '15px 28px', borderRadius: 999, cursor: 'pointer', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1.5px solid rgba(255,255,255,0.28)', color: '#fff', fontSize: 15, fontWeight: 600 }}>
+                  Ver servicios ↓
+                </button>
+              </Magnet>
             </div>
 
             <div className="hero-5" style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
@@ -361,7 +367,7 @@ const Landing = ({ onNavigate }) => {
         <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 0, maxWidth: 960, margin: '0 auto' }}>
           {STATS.map((s, i) => (
             <div key={i} style={{ borderRight: i < STATS.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
-              <StatCounter value={s.value} suffix={s.suffix} label={s.label} active={statsVis} />
+              <StatCounter value={s.value} suffix={s.suffix} label={s.label} />
             </div>
           ))}
         </div>
@@ -573,9 +579,11 @@ const Landing = ({ onNavigate }) => {
           <p style={{ fontSize: 17, color: 'rgba(255,255,255,0.6)', margin: '0 auto 44px', lineHeight: 1.65, maxWidth: 460 }}>
             Elige el día y horario que mejor te convenga. Te confirmamos por WhatsApp al instante, sin llamadas ni filas.
           </p>
-          <button className="cta-pulse" onClick={() => onNavigate('booking')} style={{ padding: '18px 48px', borderRadius: 999, border: 'none', cursor: 'pointer', background: '#fff', color: '#0F766E', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            <Icons.Calendar size={19} /> Reservar mi cita gratis
-          </button>
+          <Magnet magnetStrength={2.5} padding={80}>
+            <button className="cta-pulse" onClick={() => onNavigate('booking')} style={{ padding: '18px 48px', borderRadius: 999, border: 'none', cursor: 'pointer', background: '#fff', color: '#0F766E', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <Icons.Calendar size={19} /> Reservar mi cita gratis
+            </button>
+          </Magnet>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 18 }}>
             Sin costo · Sin registro previo · Solo elige tu horario
           </p>
