@@ -372,10 +372,12 @@ export const getImagenes = async (pacienteId) => {
 
 export const createImagen = async (pacienteId, img) => {
   const today = new Date().toISOString().split('T')[0];
-  await supabase.from('imagenes_clinicas').insert({
+  const { data } = await supabase.from('imagenes_clinicas').insert({
     paciente_id: pacienteId, fecha: today,
     descripcion: img.descripcion, tipo: img.tipo, url: img.url || null,
-  });
+  }).select().single();
+  if (!data) return null;
+  return { _id: data.id, fecha: isoToLocale(today), descripcion: data.descripcion, tipo: data.tipo, url: data.url };
 };
 
 // ── Consentimientos ───────────────────────────────────────────────
@@ -456,18 +458,38 @@ export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
     .map(b => chars[b % chars.length]).join('') + 'Aa1!';
 
   const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: tempPass });
-  if (error) throw error;
+
+  // Error explícito de email ya registrado
+  if (error) {
+    const msg = error.message?.toLowerCase() || '';
+    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin + window.location.pathname,
+      });
+      throw new Error('EMAIL_EXISTS');
+    }
+    throw error;
+  }
 
   const userId = data.user?.id;
-  if (!userId) throw new Error('No se pudo crear el usuario');
+
+  // Supabase devuelve user=null cuando el email ya existe (con "confirm email" activo)
+  if (!userId) {
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    throw new Error('EMAIL_EXISTS');
+  }
 
   const { error: pErr } = await supabase.from('perfiles').insert({
-    id: userId,
-    nombre: nombre.trim(),
-    rol,
+    id: userId, nombre: nombre.trim(), rol,
     doctor_id: rol === 'doctor' ? (doctorId || null) : null,
   });
-  if (pErr) throw pErr;
+  // 23505 = unique constraint: perfiles ya existe para este usuario
+  if (pErr) {
+    if (pErr.code === '23505') throw new Error('EMAIL_EXISTS');
+    throw pErr;
+  }
 
   await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: window.location.origin + window.location.pathname,
@@ -514,4 +536,200 @@ export const getBadgesData = async () => {
       .eq('estado', 'pendiente'),
   ]);
   return { citasHoy: r1.count || 0, solicitudes: r2.count || 0 };
+};
+
+// ── Cobro ─────────────────────────────────────────────────────────────────────
+export const createPago = async ({ pacienteId, monto, metodo, banco, tratamiento, reciboRef }) => {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase.from('pagos').insert({
+    paciente_id: pacienteId || null,
+    fecha: today,
+    monto,
+    metodo,
+    banco_id: banco || null,
+    numero_recibo: reciboRef || null,
+    tratamiento: tratamiento || null,
+  }).select().single();
+  if (error) throw error;
+  return data;
+};
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+export const getCitasHoy = async (doctorId = null) => {
+  const today = new Date().toISOString().slice(0, 10);
+  let q = supabase
+    .from('citas')
+    .select('id, hora, tratamiento, estado, paciente_id, doctor_id, pacientes(nombre, apellidos, avatar, avatar_color), doctores(nombre)')
+    .eq('fecha', today)
+    .neq('estado', 'cancelada')
+    .order('hora');
+  if (doctorId) q = q.eq('doctor_id', doctorId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data || []).map(c => ({
+    id: c.id,
+    hora: c.hora || '00:00',
+    paciente: c.pacientes ? `${c.pacientes.nombre} ${c.pacientes.apellidos}` : '—',
+    avatar: c.pacientes?.avatar || '?',
+    avatarColor: c.pacientes?.avatar_color || '#0D9488',
+    tratamiento: c.tratamiento || '—',
+    doctor: c.doctores?.nombre || '—',
+    estado: c.estado,
+    pacienteId: c.paciente_id,
+  }));
+};
+
+export const getIngresosHoy = async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase.from('pagos').select('monto').eq('fecha', today);
+  if (error) return 0;
+  return (data || []).reduce((s, p) => s + Number(p.monto), 0);
+};
+
+export const getIngresosRango = async (desde, hasta) => {
+  const { data } = await supabase
+    .from('pagos').select('fecha, monto')
+    .gte('fecha', desde).lte('fecha', hasta).order('fecha');
+  const byDay = {};
+  for (const p of data || []) byDay[p.fecha] = (byDay[p.fecha] || 0) + Number(p.monto);
+  const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const result = [];
+  const cur = new Date(desde + 'T12:00:00');
+  const end = new Date(hasta + 'T12:00:00');
+  while (cur <= end) {
+    const iso = cur.toISOString().slice(0, 10);
+    result.push({ x: DIAS[cur.getDay()], y: byDay[iso] || 0 });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+};
+
+// ── Reportes ──────────────────────────────────────────────────────────────────
+export const getReportePeriodo = async (desde, hasta) => {
+  const [r1, r2] = await Promise.all([
+    supabase.from('pagos').select('fecha, monto').gte('fecha', desde).lte('fecha', hasta).order('fecha'),
+    supabase.from('citas').select('fecha, estado, paciente_id').gte('fecha', desde).lte('fecha', hasta),
+  ]);
+  const pagos = r1.data || [];
+  const citas = r2.data || [];
+  const ingresos = pagos.reduce((s, p) => s + Number(p.monto), 0);
+  const pacientesSet = new Set(citas.filter(c => c.estado !== 'cancelada').map(c => c.paciente_id));
+  const canceladas = citas.filter(c => c.estado === 'cancelada').length;
+  const tratamientos = citas.filter(c => c.estado === 'completada').length;
+  const byDay = {};
+  for (const p of pagos) byDay[p.fecha] = (byDay[p.fecha] || 0) + Number(p.monto);
+  const chart = Object.entries(byDay)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, y]) => ({ x: fecha.slice(5).replace('-', '/'), y }));
+  return { ingresos, pacientes: pacientesSet.size, tratamientos, canceladas, chart };
+};
+
+// ── Presupuestos ──────────────────────────────────────────────────────────────
+export const getPresupuestos = async () => {
+  const { data, error } = await supabase
+    .from('presupuestos').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(p => ({
+    id: p.id,
+    pacienteId: p.paciente_id,
+    paciente: p.paciente_nombre,
+    tel: p.tel || '',
+    doctor: p.doctor || '',
+    consultorio: p.consultorio || 'A',
+    fecha: p.fecha,
+    vencimiento: p.vencimiento,
+    estado: p.estado || 'borrador',
+    items: p.items || [],
+    descuentoGlobal: Number(p.descuento_global || 0),
+    planPago: p.plan_pago || 'contado',
+    notas: p.notas || '',
+  }));
+};
+
+export const createPresupuesto = async (pres) => {
+  const { data, error } = await supabase.from('presupuestos').insert({
+    paciente_id: pres.pacienteId || null,
+    paciente_nombre: pres.paciente,
+    tel: pres.tel || null,
+    doctor: pres.doctor || null,
+    consultorio: pres.consultorio || 'A',
+    fecha: pres.fecha,
+    vencimiento: pres.vencimiento,
+    estado: pres.estado || 'borrador',
+    items: pres.items,
+    descuento_global: pres.descuentoGlobal || 0,
+    plan_pago: pres.planPago || 'contado',
+    notas: pres.notas || null,
+  }).select('id').single();
+  if (error) throw error;
+  return { ...pres, id: data.id };
+};
+
+export const updatePresupuestoEstado = async (id, estado) => {
+  const { error } = await supabase.from('presupuestos').update({ estado }).eq('id', id);
+  if (error) throw error;
+};
+
+// ── Evoluciones clínicas ──────────────────────────────────────────────────────
+export const getEvoluciones = async (pacienteId) => {
+  const { data, error } = await supabase
+    .from('evoluciones').select('*').eq('paciente_id', pacienteId)
+    .order('fecha', { ascending: false }).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(e => ({
+    id: e.id,
+    fecha: e.fecha,
+    doctor: e.doctor_nombre || '—',
+    motivo: e.motivo || '',
+    hallazgos: e.hallazgos || '',
+    procedimiento: e.procedimiento || '',
+    indicaciones: e.indicaciones || '',
+    prescripcion: e.prescripcion || '',
+    proximaCita: e.proxima_cita || '',
+  }));
+};
+
+export const createEvolucion = async (pacienteId, entry, doctorId) => {
+  const { data, error } = await supabase.from('evoluciones').insert({
+    paciente_id: pacienteId,
+    doctor_id: doctorId || null,
+    doctor_nombre: entry.doctor || null,
+    fecha: entry.fecha,
+    motivo: entry.motivo || null,
+    hallazgos: entry.hallazgos || null,
+    procedimiento: entry.procedimiento || null,
+    indicaciones: entry.indicaciones || null,
+    prescripcion: entry.prescripcion || null,
+    proxima_cita: entry.proximaCita || null,
+  }).select('id').single();
+  if (error) throw error;
+  return { ...entry, id: data.id };
+};
+
+// ── Recetas médicas ───────────────────────────────────────────────────────────
+export const getRecetas = async (pacienteId) => {
+  const { data, error } = await supabase
+    .from('recetas').select('*').eq('paciente_id', pacienteId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(r => ({
+    id: r.id,
+    fecha: r.fecha,
+    doctor: r.doctor_nombre || '—',
+    items: r.items || [],
+    observaciones: r.observaciones || '',
+  }));
+};
+
+export const createReceta = async (pacienteId, receta, doctorId) => {
+  const { data, error } = await supabase.from('recetas').insert({
+    paciente_id: pacienteId,
+    doctor_id: doctorId || null,
+    doctor_nombre: receta.doctor || null,
+    fecha: receta.fecha,
+    items: receta.items,
+    observaciones: receta.observaciones || null,
+  }).select('id').single();
+  if (error) throw error;
+  return { ...receta, id: data.id };
 };

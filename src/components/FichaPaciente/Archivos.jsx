@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Icons } from '../icons';
 import { Button, Badge } from '../ui';
 import { getImagenes, createImagen, getConsentimientos, createConsentimiento, updateConsentimientoFirmado } from '../../lib/db';
+import { uploadToCloudinary } from '../../lib/cloudinary';
 
 const Archivos = ({ patientId }) => {
-  const [images, setImages] = useState([]);
-  const [docs,   setDocs]   = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [images, setImages]         = useState([]);
+  const [docs,   setDocs]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [uploading, setUploading]   = useState(false);
   const imgRef = useRef(null);
   const docRef = useRef(null);
 
@@ -21,13 +23,15 @@ const Archivos = ({ patientId }) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     e.target.value = '';
+    setUploading(true);
     for (const f of files) {
-      const img = { descripcion: f.name.replace(/\.[^.]+$/, ''), tipo: 'clinica', url: null };
       try {
-        await createImagen(patientId, img);
-        setImages(prev => [...prev, { fecha: new Date().toLocaleDateString('es-BO'), ...img, url: URL.createObjectURL(f) }]);
+        const url = await uploadToCloudinary(f, `dental/${patientId}`);
+        const saved = await createImagen(patientId, { descripcion: f.name.replace(/\.[^.]+$/, ''), tipo: 'clinica', url });
+        if (saved) setImages(prev => [saved, ...prev]);
       } catch (err) { console.error(err); }
     }
+    setUploading(false);
   };
 
   const handleDocUpload = async (e) => {
@@ -63,7 +67,9 @@ const Archivos = ({ patientId }) => {
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Archivos del paciente</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <input ref={imgRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImageUpload} />
-          <Button variant="secondary" size="sm" icon={Icons.Plus} onClick={() => imgRef.current.click()}>Subir imagen</Button>
+          <Button variant="secondary" size="sm" icon={Icons.Plus} onClick={() => imgRef.current.click()} disabled={uploading}>
+            {uploading ? 'Subiendo…' : 'Subir imagen'}
+          </Button>
           <input ref={docRef} type="file" accept=".pdf,.doc,.docx" multiple style={{ display: 'none' }} onChange={handleDocUpload} />
           <Button variant="secondary" size="sm" icon={Icons.Plus} onClick={() => docRef.current.click()}>Nuevo documento</Button>
         </div>

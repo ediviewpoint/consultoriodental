@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import DC_DATA from './components/data';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { getProfile, getSucursales, getDoctores, saveSucursales, getBadgesData } from './lib/db';
 import Sidebar from './components/Sidebar';
@@ -46,12 +45,15 @@ const App = () => {
   const [patientId, setPatientId]       = useState(initial === 'ficha' ? 1 : null);
   const [cobroPatient, setCobroPatient] = useState(null);
   const [consultorio, setConsultorio]   = useState('A');
+  const [visited, setVisited]           = useState(() => new Set([initial]));
+  const currentUserRef                  = useRef(null);
+  const navCountRef                     = useRef(0);
 
   const [sucursales, setSucursales] = useState(() => {
     try {
       const s = localStorage.getItem('dc_sucursales');
-      return s ? JSON.parse(s) : DC_DATA.CLINIC.sucursales;
-    } catch { return DC_DATA.CLINIC.sucursales; }
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
   });
 
   const loadAppData = async () => {
@@ -92,6 +94,7 @@ const App = () => {
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setDoctors([]);
+        setVisited(new Set(['dashboard']));
       }
     });
 
@@ -105,9 +108,43 @@ const App = () => {
   };
 
   const handleLogout = async () => {
+    navCountRef.current = 0;
     await supabase.auth.signOut();
     window.location.hash = '';
   };
+
+  useEffect(() => {
+    setVisited(prev => {
+      if (prev.has(screen)) return prev;
+      const next = new Set(prev);
+      next.add(screen);
+      return next;
+    });
+  }, [screen]);
+
+  // Mantiene la ref actualizada para usarla dentro del listener sin closures viejos
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
+  // Sincroniza el estado con la flecha atrás/adelante del navegador.
+  // Escucha AMBOS eventos: hashchange (cambios directos de hash) y popstate
+  // (navegación del historial). Algunos navegadores solo disparan uno de los dos.
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const h = (window.location.hash || '').replace('#', '');
+      const user = currentUserRef.current;
+      if (VALID_SCREENS.includes(h)) {
+        setScreen(canAccess(user?.role, h) ? h : 'dashboard');
+      } else if (!h || h === 'landing') {
+        setScreen(user ? 'dashboard' : 'landing');
+      }
+    };
+    window.addEventListener('hashchange', syncFromUrl);
+    window.addEventListener('popstate',   syncFromUrl);
+    return () => {
+      window.removeEventListener('hashchange', syncFromUrl);
+      window.removeEventListener('popstate',   syncFromUrl);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect to dashboard if restored session lands on a forbidden screen or public screen
   useEffect(() => {
@@ -125,14 +162,29 @@ const App = () => {
     setScreen(target);
     setPatientId(target === 'ficha' ? (opts.patientId || patientId || 1) : null);
     if (target === 'cobros') setCobroPatient(opts.patient || null);
-    window.location.hash = target;
+    if (opts.replace) {
+      window.history.replaceState(null, '', '#' + target);
+    } else {
+      navCountRef.current += 1;
+      window.location.hash = target;
+    }
   };
 
-  const openPatient = (id) => { setPatientId(id); setScreen('ficha'); window.location.hash = 'ficha'; };
+  // Retrocede en el historial del navegador si hay entradas propias, o navega con replace como fallback
+  const goBack = (fallback = 'dashboard') => {
+    if (navCountRef.current > 0) {
+      navCountRef.current -= 1;
+      window.history.back();
+    } else {
+      navigate(fallback, { replace: true });
+    }
+  };
+
+  const openPatient = (id) => navigate('ficha', { patientId: id });
   const activeNav   = screen === 'ficha' ? 'pacientes' : screen;
 
   if (screen === 'landing') {
-    return <Landing onNavigate={navigate} />;
+    return <Landing onNavigate={navigate} sucursales={sucursales} />;
   }
 
   if (screen === 'booking') {
@@ -140,7 +192,7 @@ const App = () => {
       <BookingPage
         sucursales={sucursales}
         doctors={doctors}
-        onBack={() => navigate('landing')}
+        onBack={() => goBack('landing')}
       />
     );
   }
@@ -171,16 +223,18 @@ const App = () => {
           onLogout={handleLogout}
           sucursales={sucursales}
         />
-        {screen === 'dashboard'     && <Dashboard onOpenPatient={openPatient} onNavigate={navigate} user={currentUser} />}
-        {screen === 'pacientes'     && <Pacientes onOpenPatient={openPatient} onNavigate={navigate} user={currentUser} doctors={doctors} />}
-        {screen === 'ficha'         && <FichaPaciente patientId={patientId} onBack={() => navigate('pacientes')} onNavigate={navigate} user={currentUser} doctors={doctors} sucursales={sucursales} />}
-        {screen === 'agenda'        && <Agenda consultorio={consultorio} user={currentUser} sucursales={sucursales} doctors={doctors} />}
-        {screen === 'cobros'        && <Cobro patient={cobroPatient} onNavigate={navigate} consultorio={consultorio} sucursales={sucursales} />}
-        {screen === 'reportes'      && <Reportes consultorio={consultorio} />}
-        {screen === 'configuracion' && <Configuracion sucursales={sucursales} onSaveSucursales={handleSaveSucursales} doctors={doctors} user={currentUser} />}
-        {screen === 'presupuestos'  && <Presupuestos />}
-        {screen === 'liquidacion'   && <Liquidacion consultorio={consultorio} user={currentUser} doctors={doctors} />}
-        {screen === 'admision'      && <Admision onComplete={() => navigate('pacientes')} onCancel={() => navigate('pacientes')} onOpenExisting={openPatient} doctors={doctors} sucursales={sucursales} user={currentUser} />}
+        {/* Pantallas estables: se montan la primera vez y se ocultan/muestran con CSS */}
+        {visited.has('dashboard')     && <div style={screen !== 'dashboard'     ? { display: 'none' } : undefined}><Dashboard onOpenPatient={openPatient} onNavigate={navigate} user={currentUser} /></div>}
+        {visited.has('pacientes')     && <div style={screen !== 'pacientes'     ? { display: 'none' } : undefined}><Pacientes onOpenPatient={openPatient} onNavigate={navigate} user={currentUser} doctors={doctors} /></div>}
+        {visited.has('agenda')        && <div style={screen !== 'agenda'        ? { display: 'none' } : undefined}><Agenda consultorio={consultorio} user={currentUser} sucursales={sucursales} doctors={doctors} /></div>}
+        {visited.has('reportes')      && <div style={screen !== 'reportes'      ? { display: 'none' } : undefined}><Reportes consultorio={consultorio} doctors={doctors} /></div>}
+        {visited.has('configuracion') && <div style={screen !== 'configuracion' ? { display: 'none' } : undefined}><Configuracion sucursales={sucursales} onSaveSucursales={handleSaveSucursales} doctors={doctors} user={currentUser} /></div>}
+        {visited.has('presupuestos')  && <div style={screen !== 'presupuestos'  ? { display: 'none' } : undefined}><Presupuestos /></div>}
+        {visited.has('liquidacion')   && <div style={screen !== 'liquidacion'   ? { display: 'none' } : undefined}><Liquidacion consultorio={consultorio} user={currentUser} doctors={doctors} /></div>}
+        {visited.has('admision')      && <div style={screen !== 'admision'      ? { display: 'none' } : undefined}><Admision onComplete={() => navigate('pacientes', { replace: true })} onCancel={() => navigate('pacientes', { replace: true })} onOpenExisting={openPatient} doctors={doctors} sucursales={sucursales} user={currentUser} /></div>}
+        {/* Pantallas dinámicas: siempre remontan porque dependen de datos por paciente */}
+        {screen === 'ficha'  && <FichaPaciente key={patientId}        patientId={patientId} onBack={() => goBack('pacientes')} onNavigate={navigate} user={currentUser} doctors={doctors} sucursales={sucursales} />}
+        {screen === 'cobros' && <Cobro         key={cobroPatient?.id} patient={cobroPatient} onNavigate={navigate} consultorio={consultorio} sucursales={sucursales} />}
       </div>
     </div>
   );

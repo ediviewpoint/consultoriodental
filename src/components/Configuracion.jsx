@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, Card, CardHead, Tabs, Field, Modal, fmtBs } from './ui';
 import { getCatalogo, saveCatalogo, saveDocorComision, createDoctor, updateDoctor, deleteDoctor, getPerfiles, updatePerfil, sendPasswordReset, inviteNewUser } from '../lib/db';
@@ -14,7 +13,7 @@ const TabCatalogo = () => {
   useEffect(() => {
     getCatalogo()
       .then(setCatalog)
-      .catch(() => setCatalog(DC_DATA.TREATMENT_CATALOG.map(t => ({ ...t }))))
+      .catch(() => setCatalog([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -190,8 +189,16 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
               doctorId: data.id,
             });
             setInviteStatus('ok');
-          } catch {
-            setInviteStatus('err');
+          } catch (invErr) {
+            // El doctor YA fue guardado — cerrar modal para evitar que el usuario
+            // intente guardar de nuevo y genere un duplicado
+            setModal(false);
+            setForm(EMPTY_FORM);
+            if (invErr?.message === 'EMAIL_EXISTS') {
+              setFormErr('El doctor fue guardado. El correo ya tiene una cuenta — se le envió un enlace para establecer su contraseña.');
+            } else {
+              setFormErr('El doctor fue guardado. Hubo un problema enviando la invitación — invítalo desde la sección "Accesos al sistema".');
+            }
           }
         } else {
           setModal(false);
@@ -471,7 +478,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
 
 // ── Tab: Sucursales ──────────────────────────────────────────────────────────
 const TabSucursales = ({ sucursales: sucProp, onSaveSucursales }) => {
-  const initSuc = sucProp || DC_DATA.CLINIC.sucursales;
+  const initSuc = sucProp || {};
   const [sucursales, setSucursales] = useState({ A: { ...initSuc.A }, B: { ...initSuc.B } });
   const [saved, setSaved]   = useState(false);
   const [saving, setSaving] = useState(false);
@@ -603,7 +610,7 @@ const TabUsuarios = ({ doctors = [] }) => {
       setInvForm(INVITE_EMPTY);
       getPerfiles().then(setPerfiles).catch(console.error);
     } catch (err) {
-      setInvErr(err?.message?.includes('already registered') ? 'Este correo ya tiene una cuenta en el sistema.' : 'Error al enviar la invitación. Intenta de nuevo.');
+      setInvErr(err?.message === 'EMAIL_EXISTS' || err?.message?.toLowerCase().includes('already') ? 'Este correo ya tiene una cuenta. Se le envió un enlace para establecer su contraseña.' : 'Error al enviar la invitación. Intenta de nuevo.');
       console.error(err);
     } finally {
       setInviting(false);

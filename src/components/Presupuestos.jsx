@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef } from 'react';
-import DC_DATA from './data';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Icons } from './icons';
 import { Button, IconButton, Card, Badge, Field, Modal, fmtBs } from './ui';
+import { getPacientes, getDoctores, getCatalogo, getPresupuestos, createPresupuesto, updatePresupuestoEstado } from '../lib/db';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const calcTotals = (items, descuentoGlobal = 0) => {
@@ -149,33 +149,33 @@ const QuoteDoc = ({ q, compact = false }) => {
 };
 
 // ── Builder de presupuesto ───────────────────────────────────────────────────
-const EMPTY_FORM = () => ({
-  pacienteId: '',
-  doctor: DC_DATA.DOCTORS[0]?.name || '',
-  consultorio: 'A',
-  fecha: TODAY,
-  vencimiento: EXPIRY,
-  items: [],
-  descuentoGlobal: 0,
-  planPago: 'contado',
-  notas: '',
-});
-
-const QuoteBuilder = ({ onSave, onCancel }) => {
-  const [form, setForm]           = useState(EMPTY_FORM());
+const QuoteBuilder = ({ onSave, onCancel, patients, doctors, catalog }) => {
+  const [form, setForm]           = useState({
+    pacienteId: '', doctor: '', consultorio: 'A',
+    fecha: TODAY, vencimiento: EXPIRY,
+    items: [], descuentoGlobal: 0, planPago: 'contado', notas: '',
+  });
   const [catQuery, setCatQuery]   = useState('');
   const [catOpen, setCatOpen]     = useState(false);
   const nextId                    = useRef(1);
+  const defaultDoctorSet          = useRef(false);
+
+  useEffect(() => {
+    if (!defaultDoctorSet.current && doctors.length > 0) {
+      setForm(f => ({ ...f, doctor: f.doctor || doctors[0].name }));
+      defaultDoctorSet.current = true;
+    }
+  }, [doctors]);
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const selectedPat = DC_DATA.PATIENTS.find(p => p.id === Number(form.pacienteId));
+  const selectedPat = patients.find(p => p.id === Number(form.pacienteId));
 
   const filteredCat = catQuery.trim()
-    ? DC_DATA.TREATMENT_CATALOG.filter(t =>
+    ? catalog.filter(t =>
         t.tratamiento.toLowerCase().includes(catQuery.toLowerCase()) ||
         t.categoria.toLowerCase().includes(catQuery.toLowerCase()))
-    : DC_DATA.TREATMENT_CATALOG;
+    : catalog;
 
   // Group catalog by category
   const catGroups = filteredCat.reduce((acc, t) => {
@@ -202,7 +202,7 @@ const QuoteBuilder = ({ onSave, onCancel }) => {
     if (!isValid) return;
     const p = selectedPat;
     onSave({
-      id: `PRES-2025-${String(Date.now()).slice(-3)}`,
+      id: `PRES-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`,
       pacienteId: p.id,
       paciente:   `${p.nombre} ${p.apellidos}`,
       tel:        p.tel,
@@ -219,7 +219,7 @@ const QuoteBuilder = ({ onSave, onCancel }) => {
   };
 
   const previewQ = selectedPat ? {
-    id: 'PRES-2025-NEW',
+    id: `PRES-${new Date().getFullYear()}-NEW`,
     paciente: `${selectedPat.nombre} ${selectedPat.apellidos}`,
     tel: selectedPat.tel,
     doctor: form.doctor, consultorio: form.consultorio,
@@ -261,11 +261,11 @@ const QuoteBuilder = ({ onSave, onCancel }) => {
                   <select className="select" value={form.pacienteId}
                     onChange={e => {
                       const pid = e.target.value;
-                      const p   = DC_DATA.PATIENTS.find(x => x.id === Number(pid));
+                      const p   = patients.find(x => x.id === Number(pid));
                       setForm(f => ({ ...f, pacienteId: pid, doctor: p?.doctor || f.doctor, consultorio: p?.consultorio || f.consultorio }));
                     }}>
                     <option value="">— Seleccionar paciente —</option>
-                    {DC_DATA.PATIENTS.map(p => (
+                    {patients.map(p => (
                       <option key={p.id} value={p.id}>{p.nombre} {p.apellidos} · CI {p.ci}</option>
                     ))}
                   </select>
@@ -273,7 +273,7 @@ const QuoteBuilder = ({ onSave, onCancel }) => {
               </div>
               <Field label="Doctor">
                 <select className="select" value={form.doctor} onChange={e => upd('doctor', e.target.value)}>
-                  {DC_DATA.DOCTORS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  {doctors.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                 </select>
               </Field>
               <Field label="Consultorio">
@@ -555,26 +555,52 @@ const QuoteDetailModal = ({ quote, onClose, onStatusChange, onDuplicate }) => {
 
 // ── Vista principal: lista de presupuestos ───────────────────────────────────
 const Presupuestos = () => {
-  const [quotes, setQuotes]           = useState(DC_DATA.PRESUPUESTOS);
-  const [view, setView]               = useState('list');
+  const [quotes, setQuotes]             = useState([]);
+  const [patients, setPatients]         = useState([]);
+  const [doctors, setDoctors]           = useState([]);
+  const [catalog, setCatalog]           = useState([]);
+  const [view, setView]                 = useState('list');
   const [filterStatus, setFilterStatus] = useState('todos');
-  const [query, setQuery]             = useState('');
-  const [detailQ, setDetailQ]         = useState(null);
+  const [query, setQuery]               = useState('');
+  const [detailQ, setDetailQ]           = useState(null);
 
-  const handleSave = (q) => { setQuotes(prev => [q, ...prev]); setView('list'); };
+  useEffect(() => {
+    Promise.all([
+      getPacientes().catch(() => []),
+      getDoctores().catch(() => []),
+      getCatalogo().catch(() => []),
+      getPresupuestos().catch(() => []),
+    ]).then(([pats, docs, cat, presups]) => {
+      setPatients(pats);
+      setDoctors(docs);
+      setCatalog(cat);
+      setQuotes(presups);
+    });
+  }, []);
 
-  const handleStatusChange = (id, newStatus) =>
+  const handleSave = async (q) => {
+    try {
+      const saved = await createPresupuesto(q);
+      setQuotes(prev => [saved, ...prev]);
+    } catch {
+      setQuotes(prev => [q, ...prev]);
+    }
+    setView('list');
+  };
+
+  const handleStatusChange = async (id, newStatus) => {
+    try { await updatePresupuestoEstado(id, newStatus); } catch {}
     setQuotes(prev => prev.map(q => q.id === id ? { ...q, estado: newStatus } : q));
+  };
 
-  const handleDuplicate = (q) => {
-    const copy = {
-      ...q,
-      id: `PRES-2025-D${String(Date.now()).slice(-2)}`,
-      estado: 'borrador',
-      fecha: TODAY,
-      vencimiento: EXPIRY,
-    };
-    setQuotes(prev => [copy, ...prev]);
+  const handleDuplicate = async (q) => {
+    const copy = { ...q, estado: 'borrador', fecha: TODAY, vencimiento: EXPIRY };
+    try {
+      const saved = await createPresupuesto(copy);
+      setQuotes(prev => [saved, ...prev]);
+    } catch {
+      setQuotes(prev => [{ ...copy, id: `PRES-D${Date.now().toString(36).slice(-4).toUpperCase()}` }, ...prev]);
+    }
   };
 
   const filtered = useMemo(() =>
@@ -608,7 +634,7 @@ const Presupuestos = () => {
     .filter(f => f.id === 'todos' || f.count > 0);
 
   if (view === 'builder') {
-    return <QuoteBuilder onSave={handleSave} onCancel={() => setView('list')} />;
+    return <QuoteBuilder onSave={handleSave} onCancel={() => setView('list')} patients={patients} doctors={doctors} catalog={catalog} />;
   }
 
   return (
@@ -701,7 +727,7 @@ const Presupuestos = () => {
             <tbody>
               {filtered.map(q => {
                 const { total } = calcTotals(q.items, q.descuentoGlobal);
-                const pat       = DC_DATA.PATIENTS.find(p => p.id === q.pacienteId);
+                const pat       = patients.find(p => p.id === q.pacienteId);
                 return (
                   <tr key={q.id} className="clickable" onClick={() => setDetailQ(q)}>
                     <td>

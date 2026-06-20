@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, IconButton } from './ui';
 
-const NotifDropdown = ({ onClose, onNavigate }) => {
+const NotifDropdown = ({ onClose, onNavigate, alerts = [] }) => {
   const ref = useRef(null);
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -24,10 +23,10 @@ const NotifDropdown = ({ onClose, onNavigate }) => {
       <div className="notif-head">
         <h4>Avisos del sistema</h4>
         <span className="badge badge-pending" style={{ fontSize: 10 }}>
-          {DC_DATA.ALERTS.length} avisos
+          {alerts.length} avisos
         </span>
       </div>
-      {DC_DATA.ALERTS.map((a, i) => {
+      {alerts.map((a, i) => {
         const IconComp = ICONS_MAP[a.icon] || Icons.AlertCircle;
         const colorMap = { info: 'var(--dc-primary)', warning: '#D97706', alert: 'var(--dc-alert)' };
         return (
@@ -55,7 +54,7 @@ const NotifDropdown = ({ onClose, onNavigate }) => {
 const Header = ({ consultorio, onConsultorio, user, onNavigate, onLogout, sucursales }) => {
   const [showNotif, setShowNotif] = useState(false);
   const initials  = user ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2) : 'U';
-  const clinicSuc = sucursales || DC_DATA.CLINIC.sucursales;
+  const clinicSuc = sucursales || {};
   const sucNombre = clinicSuc[consultorio]?.nombre || '';
 
   return (

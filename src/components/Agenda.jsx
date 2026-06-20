@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, Modal, Field, Badge } from './ui';
-import { getCitas, createCita, updateCitaEstado, getPacientes, getSolicitudesPendientes, updateSolicitudEstado } from '../lib/db';
+import { getCitas, createCita, updateCitaEstado, getPacientes, getSolicitudesPendientes, updateSolicitudEstado, getCatalogo } from '../lib/db';
 
 // Genera semana anterior / actual / siguiente basadas en la fecha real de hoy
 const buildWeeks = () => {
@@ -74,11 +73,11 @@ const citaToAppt = (c) => {
 const makeEmpty = (doctor, date) => ({
   patSelect: '', paciente: '', doctor,
   consultorio: 'A', fecha: date, hora: '09:00',
-  dur: '1', tratamiento: DC_DATA.TREATMENT_CATALOG[0].tratamiento, notas: '',
+  dur: '1', tratamiento: '', notas: '',
 });
 
 const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
-  const suc = sucursales || DC_DATA.CLINIC.sucursales;
+  const suc = sucursales || {};
 
   const isDoctor  = user?.role === 'doctor';
   const doctorObj = isDoctor ? doctors.find((d) => d.id === user.doctorId) : null;
@@ -96,6 +95,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   const [solicitudes, setSolicitudes]   = useState([]);
   const [rejectModal, setRejectModal]   = useState(null);
   const [rejectNote, setRejectNote]     = useState('');
+  const [catalogo, setCatalogo]         = useState([]);
 
 
   const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -116,6 +116,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   // Load patients for the appointment modal
   useEffect(() => {
     getPacientes().then(setPatients).catch(console.error);
+    getCatalogo().then(setCatalogo).catch(console.error);
   }, []);
 
   // Load pending booking requests — for doctors, only their own
@@ -174,7 +175,6 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
       setAppts((prev) => [...prev, citaToAppt(newCita)]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-      setWaitlist((prev) => prev.filter((w) => w.paciente !== nombre));
       setModal(false);
       resetForm();
     } catch (err) {
@@ -468,7 +468,10 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
               </Button>
               {!isDoctor && (
                 <Button variant="secondary" icon={Icons.WhatsApp} style={{ justifyContent: 'flex-start', fontSize: 13 }}
-                  onClick={() => window.open('https://wa.me/591' + (Object.values({}).join('') || ''), '_blank')}>
+                  onClick={() => {
+                  const msg = encodeURIComponent('Hola, le recordamos su cita en DentalCare Pro. Por favor confirme su asistencia. Gracias.');
+                  window.open(`https://web.whatsapp.com/send?text=${msg}`, '_blank');
+                }}>
                   Recordatorio masivo
                 </Button>
               )}
@@ -561,7 +564,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
 
           <Field label="Tipo de tratamiento">
             <select className="select" value={form.tratamiento} onChange={(e) => upd('tratamiento', e.target.value)}>
-              {DC_DATA.TREATMENT_CATALOG.map((t) => <option key={t.id} value={t.tratamiento}>{t.tratamiento}</option>)}
+              {catalogo.map((t) => <option key={t.id} value={t.tratamiento}>{t.tratamiento}</option>)}
             </select>
           </Field>
 

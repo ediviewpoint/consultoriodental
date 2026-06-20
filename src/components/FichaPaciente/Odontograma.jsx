@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from '../data';
+import { TEETH_FDI } from '../../lib/constants';
 import { Icons } from '../icons';
 import { Button } from '../ui';
 import { getEstadoDental, upsertEstadoDental } from '../../lib/db';
@@ -136,8 +136,8 @@ const Odontograma = ({ patientId }) => {
   const [globPaint, setGlobPaint]     = useState('corona');    // estado global
   const [saving, setSaving]           = useState(false);
 
-  const upper = DC_DATA.TEETH_FDI.slice(0, 16);
-  const lower = DC_DATA.TEETH_FDI.slice(16);
+  const upper = TEETH_FDI.slice(0, 16);
+  const lower = TEETH_FDI.slice(16);
 
   // Mapeo de formato antiguo (string simple) al nuevo (objeto con superficies)
   const legacyMap = {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from '../data';
+import { BANCOS } from '../../lib/constants';
 import { Icons } from '../icons';
 import { Button, fmtBs } from '../ui';
 import { getPagos } from '../../lib/db';
@@ -16,7 +16,7 @@ const Pagos = ({ patientId, patient, onNavigate }) => {
   }, [patientId]);
 
   const total = pagos.reduce((s, p) => s + p.monto, 0);
-  const BANCOS_MAP = Object.fromEntries(DC_DATA.BANCOS.map(b => [b.id, b]));
+  const BANCOS_MAP = Object.fromEntries(BANCOS.map(b => [b.id, b]));
 
   return (
     <div style={{ padding: 24 }}>

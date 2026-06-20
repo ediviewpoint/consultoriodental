@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { supabase } from '../lib/supabase';
 
@@ -14,8 +13,8 @@ const Login = () => {
   const suc = (() => {
     try {
       const s = localStorage.getItem('dc_sucursales');
-      return s ? JSON.parse(s) : DC_DATA.CLINIC.sucursales;
-    } catch { return DC_DATA.CLINIC.sucursales; }
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
   })();
 
   const handleLogin = async (e) => {

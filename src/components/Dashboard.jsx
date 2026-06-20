@@ -1,55 +1,70 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { Button, Card, CardHead, Badge, Avatar, fmtBs } from './ui';
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { getDeudaViva } from '../lib/db';
+import { getDeudaViva, getCitasHoy, getIngresosHoy, getIngresosRango } from '../lib/db';
 
-const fmtHora = (h) => `${String(Math.floor(h)).padStart(2,'0')}:${String(Math.round((h % 1) * 60)).padStart(2,'0')}`;
+const fmtHora = (h) => {
+  if (typeof h === 'string') return h.slice(0, 5);
+  return `${String(Math.floor(h)).padStart(2,'0')}:${String(Math.round((h % 1) * 60)).padStart(2,'0')}`;
+};
+
+const getWeekBounds = () => {
+  const now = new Date();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return [mon.toISOString().slice(0, 10), sun.toISOString().slice(0, 10)];
+};
 
 const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
-  const D = DC_DATA;
-  const [deudaViva, setDeudaViva] = useState([]);
+  const [deudaViva, setDeudaViva]     = useState([]);
+  const [citasHoy, setCitasHoy]       = useState([]);
+  const [ingresosHoy, setIngresosHoy] = useState(0);
+  const [weekChart, setWeekChart]     = useState([]);
 
   const isDoctor = user?.role === 'doctor';
-  const doctorObj = isDoctor ? D.DOCTORS.find(d => d.id === user.doctorId) : null;
+  const ALERTS = []; // TODO: Fetch from db
 
-  // Miércoles = dia 3
-  const todayRaw = D.WEEK_APPOINTMENTS.filter(a => a.dia === 3);
-  const today = isDoctor ? todayRaw.filter(a => a.doctor === doctorObj?.name) : todayRaw;
+  const todayLabel = new Date().toLocaleDateString('es-BO', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
 
-  const rp        = D.REPORT_PERIODS.hoy;
-  const weekChart = D.REPORT_PERIODS.semana.chart;
+  const [wMon, wSun] = getWeekBounds();
+  const weekLabel = `${new Date(wMon + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short' })} – ${new Date(wSun + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  const weekTotal = weekChart.reduce((s, d) => s + d.y, 0);
 
-  const citasHoy          = today.length;
-  const citasConfirmadas  = today.filter(a => a.estado === 'confirmada').length;
-  const citasPendientes   = today.filter(a => ['pendiente', 'en-curso'].includes(a.estado)).length;
-  const pacientesAtendidos = today.filter(a => a.estado === 'completada').length;
+  const citasCount        = citasHoy.length;
+  const citasConfirmadas  = citasHoy.filter(c => c.estado === 'confirmada').length;
+  const citasPendientes   = citasHoy.filter(c => ['pendiente', 'en-curso'].includes(c.estado)).length;
+  const pacientesAtendidos = citasHoy.filter(c => c.estado === 'completada').length;
 
-  const adminRows     = D.LIQUIDACION_SAMPLE.rows;
-  const antiFugaCount = adminRows.filter(r => r.alerta).length;
-  const sinRecibo     = adminRows.filter(r => r.alerta === 'sin-recibo').length;
-
-  const projectedCommission = doctorObj
-    ? D.LIQUIDACION_SAMPLE.rows
-        .filter(r => r.doctorId === user.doctorId)
-        .reduce((s, r) => s + r.comision, 0)
-    : 0;
+  const antiFugaCount      = 0;
+  const sinRecibo          = 0;
+  const projectedCommission = 0;
 
   const ALERT_COLOR = { info: 'var(--dc-primary)', warning: '#D97706', alert: 'var(--dc-alert)' };
 
   useEffect(() => {
+    getCitasHoy(isDoctor ? user?.doctorId : null)
+      .then(setCitasHoy)
+      .catch(() => setCitasHoy([]));
+
     if (!isDoctor) {
       getDeudaViva().then(setDeudaViva).catch(() => setDeudaViva([]));
+      getIngresosHoy().then(setIngresosHoy).catch(() => {});
+      const [mon, sun] = getWeekBounds();
+      getIngresosRango(mon, sun).then(setWeekChart).catch(() => {});
     }
-  }, [isDoctor]);
+  }, [isDoctor, user?.doctorId]);
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
           <h2 className="page-title">{isDoctor ? `Panel Médico · ${user.name}` : 'Panel principal'}</h2>
-          <p className="page-sub">Miércoles 21 de mayo 2025 · Suc. A Benjer &amp; Suc. B BRISA</p>
+          <p className="page-sub">{todayLabel} · Suc. A Benjer &amp; Suc. B BRISA</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <Button variant="secondary" icon={Icons.Calendar} onClick={() => onNavigate('agenda')}>
@@ -89,7 +104,7 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
         <Card className="metric-card">
           <div className="icon-pill"><Icons.Users size={18} /></div>
           <div className="eyebrow">{isDoctor ? 'Mis Pacientes Hoy' : 'Pacientes hoy'}</div>
-          <div className="value">{citasHoy}</div>
+          <div className="value">{citasCount}</div>
           <div className="delta">{pacientesAtendidos} atendidos · {citasPendientes} pendientes</div>
         </Card>
         <Card className="metric-card">
@@ -110,9 +125,9 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
               </div>
               <div className="eyebrow">Ingresos del día</div>
               <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>
-                {fmtBs(rp.ingresos)}
+                {fmtBs(ingresosHoy)}
               </div>
-              <div className="delta up">{rp.deltaIngr}</div>
+              <div className="delta up">{ingresosHoy > 0 ? 'Ingresos registrados hoy' : 'Sin cobros registrados hoy'}</div>
             </Card>
             <Card className="metric-card">
               <div className="icon-pill" style={{
@@ -137,7 +152,7 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
             </div>
             <div className="eyebrow">Proyección Comisión</div>
             <div className="value" style={{ fontSize: 20, fontFamily: 'var(--dc-font-mono)' }}>{fmtBs(projectedCommission)}</div>
-            <div className="delta">1–15 jun 2025</div>
+            <div className="delta">{new Date().toLocaleDateString('es-BO', { month: 'long', year: 'numeric' })}</div>
           </Card>
         )}
       </div>
@@ -152,11 +167,11 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
               <Button variant="ghost" size="sm" onClick={() => onNavigate('agenda')}>Ver semana →</Button>
             }
           />
-          {today.length === 0 ? (
+          {citasHoy.length === 0 ? (
             <div className="empty-state">Sin citas registradas para hoy.</div>
           ) : (
             <div>
-              {today.map((a, i) => (
+              {citasHoy.map((a, i) => (
                 <div
                   key={i}
                   className="agenda-item"
@@ -185,7 +200,7 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
             <div style={{ padding: '18px 18px 0' }}>
               <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600 }}>Ingresos semanales</h3>
               <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>
-                Semana 19–24 mayo 2025 · {fmtBs(D.REPORT_PERIODS.semana.ingresos)} total
+                {weekLabel} · {fmtBs(weekTotal)} total
               </div>
             </div>
             <div style={{ padding: '16px 8px 8px' }}>
@@ -232,7 +247,8 @@ const Dashboard = ({ onOpenPatient, onNavigate, user }) => {
       {!isDoctor && (
         <Card flush>
           <CardHead title="Avisos y alertas" />
-          {D.ALERTS.map((a, i) => (
+          {ALERTS.length === 0 && <div className="empty-state">No hay avisos pendientes.</div>}
+          {ALERTS.map((a, i) => (
             <div
               key={i}
               className="alert-row"

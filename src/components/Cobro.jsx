@@ -1,17 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import DC_DATA from './data';
+import { BANCOS } from '../lib/constants';
 import { Icons } from './icons';
 import { Button, Card, Avatar, Field, fmtBs, fmtBs2 } from './ui';
-
-const { BANCOS } = DC_DATA;
+import { getPlanTratamiento, createPago, createAbono } from '../lib/db';
 
 const loadQRImages = () => { try { return JSON.parse(localStorage.getItem('dc_qr_bancos') || '{}'); } catch { return {}; } };
-const savePago = (pago) => {
-  try {
-    const prev = JSON.parse(localStorage.getItem('dc_pagos') || '[]');
-    localStorage.setItem('dc_pagos', JSON.stringify([pago, ...prev]));
-  } catch {}
-};
 
 // ── Pad de firma ──────────────────────────────────────────────────────────────
 const SignaturePad = () => {
@@ -249,21 +242,41 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
   const pat       = patient || DEFAULT_PATIENT;
   const initials  = pat.avatar || `${pat.nombre[0]}${pat.apellidos?.[0] || ''}`;
   const sucKey    = consultorioProp || pat.consultorio || 'A';
-  const clinicSuc = sucursales || DC_DATA.CLINIC.sucursales;
+  const clinicSuc = sucursales || {};
   const suc       = clinicSuc[sucKey] || clinicSuc.A;
 
-  const TOTAL_TRAT  = 800;
-  const PAGADO_PREV = 0;
+  const [plan, setPlan]       = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
+
+  useEffect(() => {
+    if (!pat.id) return;
+    setLoadingPlan(true);
+    getPlanTratamiento(pat.id)
+      .then(p => {
+        setPlan(p);
+        if (p) {
+          const prev = p.abonos.reduce((s, a) => s + a.monto, 0);
+          setACuenta(Math.max(0, p.montoTotal - prev));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPlan(false));
+  }, [pat.id]);
+
+  const pagadoPrev = plan ? plan.abonos.reduce((s, a) => s + a.monto, 0) : 0;
+  const totalTrat  = plan?.montoTotal ?? 0;
+  const tratNombre = plan?.titulo || '—';
+  const maxPago    = totalTrat > 0 ? Math.max(0, totalTrat - pagadoPrev) : 99999;
 
   const [reciboNum]                        = useState(() => String(Math.floor(Math.random() * 90000) + 10000));
   const [method, setMethod]               = useState(null);
-  const [aCuenta, setACuenta]             = useState(TOTAL_TRAT - PAGADO_PREV);
+  const [aCuenta, setACuenta]             = useState(0);
   const [step, setStep]                   = useState(1);
   const [bancoUsado, setBancoUsado]       = useState(null);
   const [comprobanteUsado, setComprobante] = useState(null);
   const [reciboRef, setReciboRef]         = useState('');
 
-  const saldo = TOTAL_TRAT - PAGADO_PREV - aCuenta;
+  const saldo = totalTrat - pagadoPrev - aCuenta;
 
   const handleConfirm = ({ banco, comprobante }) => {
     const ref = method === 'qr'
@@ -273,28 +286,32 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
     setBancoUsado(banco);
     setComprobante(comprobante);
     setReciboRef(ref);
-
-    savePago({
-      id:             `PAG-${Date.now().toString(36).toUpperCase()}`,
-      pacienteId:     pat.id || null,
-      pacienteNombre: `${pat.nombre} ${pat.apellidos}`,
-      pacienteCI:     pat.ci,
-      fecha:          new Date().toLocaleDateString('es-BO'),
-      fechaHora:      new Date().toISOString(),
-      monto:          aCuenta,
-      metodo:         method,
-      banco:          banco  || null,
-      bancoNombre:    banco  ? (BANCOS.find(b => b.id === banco)?.name || null) : null,
-      comprobante:    comprobante || null,
-      tratamiento:    'Corona dental #21',
-      recibo_ref:     ref,
-      sucursal:       sucKey,
-    });
-
     setStep(2);
+
+    const saveAsync = async () => {
+      try {
+        await createPago({
+          pacienteId: pat.id || null,
+          monto: aCuenta,
+          metodo: method,
+          banco: banco || null,
+          tratamiento: tratNombre,
+          reciboRef: ref,
+        });
+        if (plan?.id) {
+          await createAbono(plan.id, { monto: aCuenta, metodo: method, recibo: ref }, pat.doctor_id || null);
+        }
+      } catch (e) {
+        console.error('Error guardando pago:', e);
+      }
+    };
+    saveAsync();
   };
 
-  const reset = () => { setStep(1); setMethod(null); setBancoUsado(null); setComprobante(null); setReciboRef(''); setACuenta(TOTAL_TRAT - PAGADO_PREV); };
+  const reset = () => {
+    setStep(1); setMethod(null); setBancoUsado(null); setComprobante(null); setReciboRef('');
+    setACuenta(Math.max(0, totalTrat - pagadoPrev));
+  };
 
   // ── Paso 2: Recibo ─────────────────────────────────────────────────────────
   if (step === 2) {
@@ -331,7 +348,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
             <div className="r-divider" />
             <div className="r-line"><span>Paciente</span><span style={{ fontWeight: 600 }}>{pat.nombre} {pat.apellidos}</span></div>
             <div className="r-line"><span>C.I.</span><span style={{ fontFamily: 'var(--dc-font-mono)' }}>{pat.ci}</span></div>
-            <div className="r-line"><span>Tratamiento</span><span>Corona dental #21</span></div>
+            <div className="r-line"><span>Tratamiento</span><span>{tratNombre}</span></div>
             <div className="r-line"><span>Profesional</span><span>{pat.doctor || 'Dra. Rosa Chávez'}</span></div>
             <div className="r-divider" />
             <div className="r-line">
@@ -358,8 +375,8 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
               </div>
             )}
             <div className="r-divider" />
-            <div className="r-line"><span>Total tratamiento</span><span>{fmtBs2(TOTAL_TRAT)}</span></div>
-            <div className="r-line"><span>Pagado previamente</span><span>{fmtBs2(PAGADO_PREV)}</span></div>
+            <div className="r-line"><span>Total tratamiento</span><span>{fmtBs2(totalTrat)}</span></div>
+            <div className="r-line"><span>Pagado previamente</span><span>{fmtBs2(pagadoPrev)}</span></div>
             <div className="r-line" style={{ fontWeight: 700 }}>
               <span>Este pago</span><span style={{ color: 'var(--dc-positive)' }}>{fmtBs2(aCuenta)}</span>
             </div>
@@ -398,7 +415,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Icons.Calendar size={16} />
-                  Próxima consulta: <strong>06/06/2025</strong>
+                  {plan?.pasos?.find(p => p.estado === 'pendiente') ? `Próximo paso: ${plan.pasos.find(p => p.estado === 'pendiente').descripcion}` : 'Sin próxima cita pendiente'}
                 </div>
                 {bancoInfo && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -444,7 +461,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
             {[
               ['Doctor',      pat.doctor || 'Dra. Rosa Chávez'],
               ['Sucursal',    `Suc. ${sucKey} — ${suc.nombre}`],
-              ['Tratamiento', 'Corona dental #21'],
+              ['Tratamiento', tratNombre],
               ['Fecha',       new Date().toLocaleDateString('es-BO')],
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -457,20 +474,20 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
           <div style={{ background: 'var(--dc-slate-50)', border: '1px solid var(--dc-border)', borderRadius: 12, padding: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
               <span style={{ color: 'var(--dc-fg-3)' }}>Total tratamiento</span>
-              <span style={{ fontWeight: 600 }}>{fmtBs2(TOTAL_TRAT)}</span>
+              <span style={{ fontWeight: 600 }}>{loadingPlan ? '…' : fmtBs2(totalTrat)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 16 }}>
               <span style={{ color: 'var(--dc-fg-3)' }}>Pagado previamente</span>
-              <span style={{ fontWeight: 600, color: 'var(--dc-positive)' }}>{fmtBs2(PAGADO_PREV)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--dc-positive)' }}>{loadingPlan ? '…' : fmtBs2(pagadoPrev)}</span>
             </div>
             <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--dc-fg-3)', display: 'block', marginBottom: 8 }}>
               A cobrar en este pago
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--dc-fg-2)' }}>Bs.</span>
-              <input className="input" type="number" min="0" max={TOTAL_TRAT - PAGADO_PREV}
+              <input className="input" type="number" min="0" max={maxPago}
                 value={aCuenta}
-                onChange={e => setACuenta(Math.max(0, Math.min(TOTAL_TRAT - PAGADO_PREV, Number(e.target.value) || 0)))}
+                onChange={e => setACuenta(Math.max(0, Math.min(maxPago, Number(e.target.value) || 0)))}
                 style={{ fontSize: 22, fontWeight: 800, padding: '8px 12px', letterSpacing: '-0.01em' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1.5px dashed var(--dc-border-strong)' }}>

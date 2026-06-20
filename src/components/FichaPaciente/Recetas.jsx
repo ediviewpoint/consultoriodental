@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Icons } from '../icons';
 import { Button, Field, Modal } from '../ui';
-
-const storageKey = (id) => `dc_rec_${id}`;
-const load   = (id) => { try { return JSON.parse(localStorage.getItem(storageKey(id)) || '[]'); } catch { return []; } };
-const persist = (id, list) => localStorage.setItem(storageKey(id), JSON.stringify(list));
+import { getRecetas, createReceta } from '../../lib/db';
 
 const TODAY = () => new Date().toISOString().split('T')[0];
 
@@ -99,13 +96,21 @@ const PrintWindow = ({ receta, patient, sucNombre }) => {
 };
 
 const Recetas = ({ patientId, patient, user, sucursales }) => {
-  const [list, setList]           = useState([]);
-  const [modal, setModal]         = useState(false);
-  const [items, setItems]         = useState([]);
-  const [obs, setObs]             = useState('');
+  const [list, setList]             = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [modal, setModal]           = useState(false);
+  const [items, setItems]           = useState([]);
+  const [obs, setObs]               = useState('');
   const [viewReceta, setViewReceta] = useState(null);
 
-  useEffect(() => { setList(load(patientId)); }, [patientId]);
+  useEffect(() => {
+    setLoading(true);
+    getRecetas(patientId)
+      .then(setList)
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [patientId]);
 
   const sucNombre = sucursales ? Object.values(sucursales)[0]?.nombre : 'Consultorio';
 
@@ -120,22 +125,27 @@ const Recetas = ({ patientId, patient, user, sucursales }) => {
   const updateInstruccion = (id, val) =>
     setItems(prev => prev.map(i => i.id === id ? { ...i, customInstruccion: val } : i));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!items.length) return;
     const receta = {
-      id:     Date.now().toString(),
       fecha:  TODAY(),
       doctor: user?.name || 'Doctor',
       items,
       observaciones: obs.trim(),
     };
-    const next = [receta, ...list];
-    setList(next);
-    persist(patientId, next);
-    setModal(false);
-    setItems([]);
-    setObs('');
-    setViewReceta(receta);
+    setSaving(true);
+    try {
+      const saved = await createReceta(patientId, receta, user?.doctorId || null);
+      setList(prev => [saved, ...prev]);
+      setModal(false);
+      setItems([]);
+      setObs('');
+      setViewReceta(saved);
+    } catch (e) {
+      console.error('Error guardando receta:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const sendWhatsApp = (r) => {
@@ -154,7 +164,7 @@ const Recetas = ({ patientId, patient, user, sucursales }) => {
         <div>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Recetas médicas</h3>
           <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 4 }}>
-            {list.length} receta{list.length !== 1 ? 's' : ''} emitida{list.length !== 1 ? 's' : ''}
+            {loading ? 'Cargando…' : `${list.length} receta${list.length !== 1 ? 's' : ''} emitida${list.length !== 1 ? 's' : ''}`}
           </div>
         </div>
         <Button icon={Icons.Plus} onClick={() => { setItems([]); setObs(''); setViewReceta(null); setModal(true); }}>
@@ -242,8 +252,8 @@ const Recetas = ({ patientId, patient, user, sucursales }) => {
         footer={
           <>
             <Button variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
-            <Button icon={Icons.Check} onClick={handleSave} disabled={!items.length}>
-              Generar receta ({items.length} medicamento{items.length !== 1 ? 's' : ''})
+            <Button icon={Icons.Check} onClick={handleSave} disabled={!items.length || saving}>
+              {saving ? 'Guardando…' : `Generar receta (${items.length} medicamento${items.length !== 1 ? 's' : ''})`}
             </Button>
           </>
         }

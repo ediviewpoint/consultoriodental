@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Icons } from '../icons';
 import { Button, Field, Modal } from '../ui';
-
-const storageKey = (id) => `dc_evo_${id}`;
-
-const load = (id) => {
-  try { return JSON.parse(localStorage.getItem(storageKey(id)) || '[]'); }
-  catch { return []; }
-};
-const persist = (id, list) => localStorage.setItem(storageKey(id), JSON.stringify(list));
+import { getEvoluciones, createEvolucion } from '../../lib/db';
 
 const emptyForm = () => ({
   fecha:         new Date().toISOString().split('T')[0],
@@ -42,17 +35,24 @@ const SECTION = ({ label, value, bg = 'var(--dc-slate-50)', color = 'var(--dc-fg
 
 const Evoluciones = ({ patientId, user }) => {
   const [list, setList]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [modal, setModal]       = useState(false);
   const [form, setForm]         = useState(emptyForm);
 
-  useEffect(() => { setList(load(patientId)); }, [patientId]);
+  useEffect(() => {
+    setLoading(true);
+    getEvoluciones(patientId)
+      .then(setList)
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [patientId]);
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const entry = {
-      id:            Date.now().toString(),
       fecha:         form.fecha,
       doctor:        user?.name || 'Doctor',
       motivo:        form.motivo.trim(),
@@ -62,12 +62,18 @@ const Evoluciones = ({ patientId, user }) => {
       prescripcion:  form.prescripcion.trim(),
       proximaCita:   form.proximaCita.trim(),
     };
-    const next = [entry, ...list];
-    setList(next);
-    persist(patientId, next);
-    setModal(false);
-    setForm(emptyForm());
-    setExpanded(entry.id);
+    setSaving(true);
+    try {
+      const saved = await createEvolucion(patientId, entry, user?.doctorId || null);
+      setList(prev => [saved, ...prev]);
+      setModal(false);
+      setForm(emptyForm());
+      setExpanded(saved.id);
+    } catch (e) {
+      console.error('Error guardando evolución:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePrint = (e, entry) => {
@@ -108,7 +114,7 @@ const Evoluciones = ({ patientId, user }) => {
         <div>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Evoluciones clínicas</h3>
           <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 4 }}>
-            {list.length} sesión{list.length !== 1 ? 'es' : ''} registrada{list.length !== 1 ? 's' : ''}
+            {loading ? 'Cargando…' : `${list.length} sesión${list.length !== 1 ? 'es' : ''} registrada${list.length !== 1 ? 's' : ''}`}
           </div>
         </div>
         <Button icon={Icons.Plus} onClick={() => { setForm(emptyForm()); setModal(true); }}>
@@ -196,8 +202,8 @@ const Evoluciones = ({ patientId, user }) => {
         footer={
           <>
             <Button variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
-            <Button icon={Icons.Check} onClick={handleSave} disabled={!isValid}>
-              Guardar evolución
+            <Button icon={Icons.Check} onClick={handleSave} disabled={!isValid || saving}>
+              {saving ? 'Guardando…' : 'Guardar evolución'}
             </Button>
           </>
         }

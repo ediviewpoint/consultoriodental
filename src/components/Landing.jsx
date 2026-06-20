@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import Particles from './reactbits/Particles';
 import BlurText  from './reactbits/BlurText';
@@ -119,8 +118,8 @@ const StatCounter = ({ value, suffix, label }) => (
 
 // ── Landing principal ─────────────────────────────────────────────────────────
 
-const Landing = ({ onNavigate }) => {
-  const suc      = DC_DATA.CLINIC.sucursales;
+const Landing = ({ onNavigate, sucursales }) => {
+  const suc      = sucursales || {};
   const sucKeys  = Object.keys(suc);
   const [scrolled, setScrolled]       = useState(false);
   const [hService, setHService]       = useState(null);

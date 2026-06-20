@@ -4,3 +4,5 @@ dist
 .env.local
 Laragon_Installer.exe
 .vercel
+cloudinary_test.*
+.claude/settings.local.json

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import DC_DATA from './data';
 import { Icons } from './icons';
 import { createSolicitud, getOcupadosDia, getDoctores } from '../lib/db';
 
@@ -35,7 +34,7 @@ const getNextDays = (n = 8) => {
 const DAYS = getNextDays(8);
 
 const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
-  const suc = sucursales || DC_DATA.CLINIC.sucursales;
+  const suc = sucursales || {};
 
   const [step, setStep]                   = useState(1);
   const [sucursal, setSucursal]           = useState('A');

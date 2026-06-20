@@ -1,40 +1,85 @@
-import { useState } from 'react';
-import DC_DATA from './data';
+import { useState, useEffect, useMemo } from 'react';
 import { Icons } from './icons';
 import { Button, Card, CardHead, Progress, fmtBs } from './ui';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
+import { getReportePeriodo } from '../lib/db';
 
 const CONS_FACTOR = { todos: 1, A: 0.55, B: 0.45 };
-const CONS_LABEL  = {
+const getConsLabel = (doctors) => ({
   todos: 'Ambos consultorios',
-  A: `Consultorio A · ${DC_DATA.DOCTORS[0]?.name || 'Doctor A'}`,
-  B: `Consultorio B · ${DC_DATA.DOCTORS[1]?.name || 'Doctor B'}`,
+  A: `Consultorio A · ${doctors[0]?.name || 'Doctor A'}`,
+  B: `Consultorio B · ${doctors[1]?.name || 'Doctor B'}`,
+});
+
+const PERIODO_CFG = {
+  hoy:       { label: 'Hoy',           chartLabel: 'Ingresos del día',       chartSub: 'Acumulado diario' },
+  semana:    { label: 'Esta semana',    chartLabel: 'Ingresos de la semana',  chartSub: 'Por día' },
+  mes:       { label: 'Este mes',       chartLabel: 'Ingresos del mes',       chartSub: 'Por día' },
+  trimestre: { label: 'Este trimestre', chartLabel: 'Ingresos del trimestre', chartSub: 'Por mes' },
+  anio:      { label: `Año ${new Date().getFullYear()}`, chartLabel: 'Ingresos del año', chartSub: 'Por mes' },
 };
 
-const Reportes = ({ consultorio: consGlobal }) => {
-  const D = DC_DATA;
-  const [periodo, setPeriodo] = useState('mayo');
-  const [cons,    setCons]    = useState('todos');
+const getPeriodRange = (periodo) => {
+  const now  = new Date();
+  const hoy  = now.toISOString().slice(0, 10);
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  switch (periodo) {
+    case 'hoy':       return { desde: hoy, hasta: hoy };
+    case 'semana': {
+      const mon = new Date(now);
+      mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { desde: mon.toISOString().slice(0, 10), hasta: sun.toISOString().slice(0, 10) };
+    }
+    case 'mes': {
+      return { desde: new Date(year, month, 1).toISOString().slice(0, 10), hasta: hoy };
+    }
+    case 'trimestre': {
+      const ini = new Date(year, month - 2, 1);
+      return { desde: ini.toISOString().slice(0, 10), hasta: hoy };
+    }
+    case 'anio':
+    default:
+      return { desde: `${year}-01-01`, hasta: `${year}-12-31` };
+  }
+};
 
-  const rp  = D.REPORT_PERIODS[periodo] || D.REPORT_PERIODS.mayo;
+const Reportes = ({ consultorio: consGlobal, doctors = [] }) => {
+  const [periodo, setPeriodo] = useState('mes');
+  const [cons,    setCons]    = useState('todos');
+  const [raw,     setRaw]     = useState({ ingresos: 0, pacientes: 0, tratamientos: 0, canceladas: 0, chart: [] });
+  const [loading, setLoading] = useState(false);
+
+  const { desde, hasta } = useMemo(() => getPeriodRange(periodo), [periodo]);
+  const cfg = PERIODO_CFG[periodo] || PERIODO_CFG.mes;
   const fac = CONS_FACTOR[cons];
 
+  useEffect(() => {
+    setLoading(true);
+    getReportePeriodo(desde, hasta)
+      .then(setRaw)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [desde, hasta]);
+
   const metrics = {
-    ingresos:       Math.round(rp.ingresos     * fac),
-    pacientes:      Math.round(rp.pacientes    * fac),
-    tratamientos:   Math.round(rp.tratamientos * fac),
-    canceladas:     Math.round(rp.canceladas   * fac),
+    ingresos:     Math.round(raw.ingresos     * fac),
+    pacientes:    Math.round(raw.pacientes    * fac),
+    tratamientos: Math.round(raw.tratamientos * fac),
+    canceladas:   Math.round(raw.canceladas   * fac),
   };
 
-  const chartData = rp.chart.map(d => ({ ...d, y: Math.round(d.y * fac) }));
+  const chartData = raw.chart.map(d => ({ ...d, y: Math.round(d.y * fac) }));
   const hasChart  = chartData.some(d => d.y > 0);
 
+  const CONS_LABEL = getConsLabel(doctors);
   const tableData = [
-    { cons: 'A', label: 'Consultorio A', doctor: DC_DATA.DOCTORS[0]?.name || 'Doctor A', ingr: Math.round(metrics.ingresos * 0.55 / 0.55 * 0.55), pac: Math.round(metrics.pacientes * 0.59), pct: 55 },
-    { cons: 'B', label: 'Consultorio B', doctor: DC_DATA.DOCTORS[1]?.name || 'Doctor B', ingr: Math.round(metrics.ingresos * 0.45 / 0.55 * 0.45), pac: Math.round(metrics.pacientes * 0.41), pct: 45 },
+    { cons: 'A', label: 'Consultorio A', doctor: doctors[0]?.name || 'Doctor A', ingr: Math.round(metrics.ingresos * 0.55), pac: Math.round(metrics.pacientes * 0.59), pct: 55 },
+    { cons: 'B', label: 'Consultorio B', doctor: doctors[1]?.name || 'Doctor B', ingr: Math.round(metrics.ingresos * 0.45), pac: Math.round(metrics.pacientes * 0.41), pct: 45 },
   ].filter(r => cons === 'todos' || r.cons === cons);
 
   return (
@@ -42,15 +87,15 @@ const Reportes = ({ consultorio: consGlobal }) => {
       <div className="page-head">
         <div>
           <h2 className="page-title">Reportes</h2>
-          <p className="page-sub">{rp.label} · {CONS_LABEL[cons]}</p>
+          <p className="page-sub">{cfg.label} · {CONS_LABEL[cons]}</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <select className="select" value={periodo} onChange={e => setPeriodo(e.target.value)} style={{ width: 'auto' }}>
             <option value="hoy">Hoy</option>
             <option value="semana">Esta semana</option>
-            <option value="mayo">Este mes</option>
+            <option value="mes">Este mes</option>
             <option value="trimestre">Este trimestre</option>
-            <option value="2025">2025</option>
+            <option value="anio">Este año</option>
           </select>
           <select className="select" value={cons} onChange={e => setCons(e.target.value)} style={{ width: 'auto' }}>
             <option value="todos">Todos los consultorios</option>
@@ -66,13 +111,13 @@ const Reportes = ({ consultorio: consGlobal }) => {
           <div className="icon-pill" style={{ background: 'rgba(16,185,129,0.14)', color: '#047857' }}><Icons.Wallet size={18} /></div>
           <div className="eyebrow">Ingresos</div>
           <div className="value">{fmtBs(metrics.ingresos)}</div>
-          <div className="delta up">{rp.deltaIngr}</div>
+          <div className="delta up">{loading ? '…' : desde === hasta ? 'Hoy' : `${desde} → ${hasta}`}</div>
         </Card>
         <Card className="metric-card">
           <div className="icon-pill"><Icons.Users size={18} /></div>
           <div className="eyebrow">Pacientes atendidos</div>
           <div className="value">{metrics.pacientes}</div>
-          <div className="delta up">{rp.deltaPac}</div>
+          <div className="delta up">{loading ? '…' : cfg.label}</div>
         </Card>
         <Card className="metric-card">
           <div className="icon-pill" style={{ background: 'rgba(59,130,246,0.14)', color: '#1D4ED8' }}><Icons.CheckCircle size={18} /></div>
@@ -92,8 +137,8 @@ const Reportes = ({ consultorio: consGlobal }) => {
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{rp.chartLabel}</h3>
-              <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 2 }}>{rp.chartSub}</div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{cfg.chartLabel}</h3>
+              <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 2 }}>{cfg.chartSub}</div>
             </div>
           </div>
           {hasChart ? (
