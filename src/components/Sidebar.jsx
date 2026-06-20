@@ -10,6 +10,7 @@ const getSectionsForRole = (role) => {
     {
       label: 'CLÍNICA',
       items: [
+        { id: 'admision',  label: 'Admisión',  icon: Icons.Plus                   },
         { id: 'pacientes', label: 'Pacientes', icon: Icons.Users                  },
         { id: 'agenda',    label: 'Agenda',    icon: Icons.Calendar, badge: '5'   },
         { id: 'cobros',    label: 'Cobros',    icon: Icons.Wallet,   badge: 'Hoy' },
