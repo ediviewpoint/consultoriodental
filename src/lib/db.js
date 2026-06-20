@@ -195,10 +195,14 @@ export const updateCitaEstado = async (id, estado) => {
 };
 
 // ── Solicitudes ───────────────────────────────────────────────────
-export const getSolicitudesPendientes = async () => {
-  const { data, error } = await supabase
-    .from('solicitudes').select('*').eq('estado', 'pendiente')
+export const getSolicitudesPendientes = async (doctorId = null) => {
+  let q = supabase
+    .from('solicitudes')
+    .select('*, doctores(nombre)')
+    .eq('estado', 'pendiente')
     .order('created_at', { ascending: false });
+  if (doctorId) q = q.eq('doctor_id', doctorId);
+  const { data, error } = await q;
   if (error) throw error;
   return data;
 };
@@ -209,15 +213,22 @@ export const createSolicitud = async (sol) => {
   return data;
 };
 
-export const updateSolicitudEstado = async (id, estado) => {
-  const { error } = await supabase.from('solicitudes').update({ estado }).eq('id', id);
+export const updateSolicitudEstado = async (id, estado, nota = null) => {
+  const updates = { estado };
+  if (nota) updates.nota_rechazo = nota;
+  const { error } = await supabase.from('solicitudes').update(updates).eq('id', id);
   if (error) throw error;
 };
 
-export const getOcupadosDia = async (fecha) => {
-  const { data } = await supabase
-    .from('solicitudes').select('hora').eq('fecha', fecha).eq('estado', 'aceptada');
-  return new Set((data || []).map(s => s.hora));
+export const getOcupadosDia = async (fecha, doctorId = null) => {
+  let q1 = supabase.from('solicitudes').select('hora').eq('fecha', fecha).eq('estado', 'aceptada');
+  let q2 = supabase.from('citas').select('hora').eq('fecha', fecha).neq('estado', 'cancelada');
+  if (doctorId) {
+    q1 = q1.eq('doctor_id', doctorId);
+    q2 = q2.eq('doctor_id', doctorId);
+  }
+  const [{ data: s }, { data: c }] = await Promise.all([q1, q2]);
+  return new Set([...((s || []).map(x => x.hora)), ...((c || []).map(x => x.hora))]);
 };
 
 // ── Historia clínica ──────────────────────────────────────────────

@@ -94,6 +94,8 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   const [detailAppt, setDetailAppt]     = useState(null);
   const [patients, setPatients]         = useState([]);
   const [solicitudes, setSolicitudes]   = useState([]);
+  const [rejectModal, setRejectModal]   = useState(null);
+  const [rejectNote, setRejectNote]     = useState('');
 
   const [waitlist, setWaitlist] = useState([
     { id: 1, paciente: 'Martín Suarez', urgencia: 'Alta',  tratamiento: 'Dolor Molar',       tel: '78234123', alert: true  },
@@ -121,10 +123,11 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
     getPacientes().then(setPatients).catch(console.error);
   }, []);
 
-  // Load pending booking requests from Supabase
+  // Load pending booking requests — for doctors, only their own
   useEffect(() => {
-    getSolicitudesPendientes().then(setSolicitudes).catch(console.error);
-  }, []);
+    getSolicitudesPendientes(isDoctor ? user?.doctorId : null)
+      .then(setSolicitudes).catch(console.error);
+  }, [isDoctor, user?.doctorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update default doctor when doctors list loads
   useEffect(() => {
@@ -249,7 +252,9 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
     const hora = Number(hStr) + Number(mStr) / 60;
 
     try {
-      const docObj = doctors[0];
+      const docObj = sol.doctor_id
+        ? doctors.find(d => d.id === sol.doctor_id) ?? doctors[0]
+        : doctors[0];
       const newCita = await createCita({
         paciente_nombre: sol.nombre,
         paciente_id:     null,
@@ -275,13 +280,19 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
     setSolicitudes((prev) => prev.filter((s) => s.id !== sol.id));
   };
 
-  const rejectSolicitud = async (sol) => {
-    const msg = encodeURIComponent(
-      `Hola ${sol.nombre}, lamentablemente el horario del *${fmtISO(sol.fecha)} a las ${sol.hora}* no está disponible en este momento. Por favor escríbenos para coordinar una alternativa. — DentalCare Pro`
+  const openRejectModal = (sol) => { setRejectModal(sol); setRejectNote(''); };
+
+  const confirmReject = async () => {
+    const sol  = rejectModal;
+    const nota = rejectNote.trim();
+    const msg  = encodeURIComponent(
+      `Hola ${sol.nombre}, lamentablemente el horario del *${fmtISO(sol.fecha)} a las ${sol.hora}* no está disponible${nota ? `. Motivo: ${nota}` : ''}. Por favor escríbenos para coordinar una alternativa. — DentalCare Pro`
     );
     window.open(`https://wa.me/591${sol.telefono.replace(/\D/g, '')}?text=${msg}`, '_blank');
-    try { await updateSolicitudEstado(sol.id, 'rechazada'); } catch (err) { console.error(err); }
+    try { await updateSolicitudEstado(sol.id, 'rechazada', nota || null); } catch (err) { console.error(err); }
     setSolicitudes((prev) => prev.filter((s) => s.id !== sol.id));
+    setRejectModal(null);
+    setRejectNote('');
   };
 
   const selectedPat = form.patSelect && form.patSelect !== '__nuevo__'
@@ -405,11 +416,13 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
         <div style={{ width: 280, flexShrink: 0 }}>
 
           {/* Solicitudes de reserva web */}
-          {!isDoctor && solicitudes.length > 0 && (
+          {solicitudes.length > 0 && (
             <div style={{ background: '#fff', border: '1.5px solid #FCD34D', borderRadius: 12, padding: 18, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Solicitudes web</h3>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                    {isDoctor ? 'Mis solicitudes' : 'Solicitudes web'}
+                  </h3>
                   <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 2 }}>
                     {solicitudes.length} pendiente{solicitudes.length !== 1 ? 's' : ''}
                   </div>
@@ -422,6 +435,11 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
                 {solicitudes.map((sol) => (
                   <div key={sol.id} style={{ padding: 12, background: 'var(--dc-slate-50)', borderRadius: 10, border: '1px solid #FDE68A' }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{sol.nombre}</div>
+                    {!isDoctor && sol.doctores?.nombre && (
+                      <div style={{ fontSize: 11, color: 'var(--dc-primary)', fontWeight: 600, marginBottom: 2 }}>
+                        Dr. {sol.doctores.nombre}
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, color: 'var(--dc-fg-3)', fontFamily: 'var(--dc-font-mono)', marginBottom: 3 }}>
                       {fmtISO(sol.fecha)} · {sol.hora}
                     </div>
@@ -434,7 +452,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
                       </Button>
                       <Button variant="secondary" size="sm"
                         style={{ fontSize: 11, color: 'var(--dc-alert)', borderColor: 'rgba(220,38,38,0.3)' }}
-                        onClick={() => rejectSolicitud(sol)}>
+                        onClick={() => openRejectModal(sol)}>
                         ✗ Rechazar
                       </Button>
                       <Button variant="secondary" size="sm" icon={Icons.WhatsApp}
@@ -588,6 +606,48 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Modal: rechazar solicitud con nota */}
+      <Modal
+        open={!!rejectModal}
+        onClose={() => setRejectModal(null)}
+        title="Rechazar solicitud"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRejectModal(null)}>Cancelar</Button>
+            <Button
+              style={{ background: '#DC2626', borderColor: '#DC2626' }}
+              icon={Icons.WhatsApp}
+              onClick={confirmReject}>
+              Enviar rechazo por WhatsApp
+            </Button>
+          </>
+        }
+      >
+        {rejectModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: 14, background: 'var(--dc-slate-50)', borderRadius: 10, border: '1px solid var(--dc-border)' }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{rejectModal.nombre}</div>
+              <div style={{ fontSize: 12, color: 'var(--dc-fg-3)', marginTop: 3, fontFamily: 'var(--dc-font-mono)' }}>
+                {fmtISO(rejectModal.fecha)} · {rejectModal.hora} · Suc. {rejectModal.sucursal_id}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--dc-fg-2)', marginTop: 2 }}>{rejectModal.motivo}</div>
+            </div>
+            <Field label="Motivo del rechazo (opcional)">
+              <textarea
+                className="textarea"
+                rows="3"
+                placeholder="Ej: El horario ya está ocupado. Te ofrecemos el martes a las 10:00…"
+                value={rejectNote}
+                onChange={e => setRejectNote(e.target.value)}
+              />
+              <div style={{ fontSize: 11, color: 'var(--dc-fg-3)', marginTop: 5 }}>
+                Se incluirá en el mensaje de WhatsApp al paciente.
+              </div>
+            </Field>
+          </div>
+        )}
       </Modal>
 
       {/* Modal: detalle de cita */}

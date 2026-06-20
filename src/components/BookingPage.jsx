@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import DC_DATA from './data';
 import { Icons } from './icons';
-import { createSolicitud, getOcupadosDia } from '../lib/db';
+import { createSolicitud, getOcupadosDia, getDoctores } from '../lib/db';
 
 const MOTIVOS = [
   'Consulta general', 'Limpieza dental', 'Control y revisión',
@@ -34,26 +34,42 @@ const getNextDays = (n = 8) => {
 
 const DAYS = getNextDays(8);
 
-const BookingPage = ({ sucursales, onBack }) => {
+const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
   const suc = sucursales || DC_DATA.CLINIC.sucursales;
 
-  const [step, setStep]               = useState(1);
-  const [sucursal, setSucursal]       = useState('A');
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedTime, setTime]       = useState(null);
-  const [form, setForm]               = useState({ nombre: '', tel: '', motivo: MOTIVOS[0] });
-  const [errors, setErrors]           = useState({});
-  const [occupied, setOccupied]       = useState(new Set());
-  const [submitting, setSubmitting]   = useState(false);
+  const [step, setStep]                   = useState(1);
+  const [sucursal, setSucursal]           = useState('A');
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedDay, setSelectedDay]     = useState(null);
+  const [selectedTime, setTime]           = useState(null);
+  const [form, setForm]                   = useState({ nombre: '', tel: '', motivo: MOTIVOS[0] });
+  const [errors, setErrors]               = useState({});
+  const [occupied, setOccupied]           = useState(new Set());
+  const [submitting, setSubmitting]       = useState(false);
+  const [doctorsList, setDoctorsList]     = useState(doctorsProp);
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
+    if (doctorsProp.length > 0) { setDoctorsList(doctorsProp); return; }
+    getDoctores().then(setDoctorsList).catch(() => {});
+  }, [doctorsProp.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const docsBySuc = doctorsList.filter(d => d.consultorio === sucursal);
+
+  const handleSucursal = (k) => {
+    setSucursal(k);
+    setSelectedDoctor(null);
+    setSelectedDay(null);
+    setTime(null);
+  };
+
+  useEffect(() => {
     if (!selectedDay) { setOccupied(new Set()); return; }
-    getOcupadosDia(selectedDay.iso)
+    getOcupadosDia(selectedDay.iso, selectedDoctor?.id || null)
       .then(setOccupied)
       .catch(() => setOccupied(new Set()));
-  }, [selectedDay]);
+  }, [selectedDay, selectedDoctor]);
 
   const validate = () => {
     const e = {};
@@ -74,6 +90,7 @@ const BookingPage = ({ sucursales, onBack }) => {
         nombre:      form.nombre.trim(),
         telefono:    form.tel.trim(),
         motivo:      form.motivo,
+        doctor_id:   selectedDoctor?.id || null,
         estado:      'pendiente',
       });
       setStep(3);
@@ -145,7 +162,7 @@ const BookingPage = ({ sucursales, onBack }) => {
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#94A3B8', marginBottom: 12 }}>¿En qué sucursal?</div>
               <div style={{ display: 'flex', gap: 10 }}>
                 {Object.entries(suc).map(([k, s]) => (
-                  <button key={k} onClick={() => setSucursal(k)} style={{
+                  <button key={k} onClick={() => handleSucursal(k)} style={{
                     flex: 1, padding: '12px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
                     border: `2px solid ${sucursal === k ? 'var(--dc-primary)' : '#E2E8F0'}`,
                     background: sucursal === k ? 'rgba(13,148,136,0.06)' : '#fff',
@@ -157,6 +174,36 @@ const BookingPage = ({ sucursales, onBack }) => {
                 ))}
               </div>
             </div>
+
+            {/* Doctor */}
+            {docsBySuc.length > 0 && (
+              <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '18px 20px', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#94A3B8', marginBottom: 12 }}>¿Con qué doctor?</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {docsBySuc.map(d => {
+                    const sel = selectedDoctor?.id === d.id;
+                    return (
+                      <button key={d.id} onClick={() => { setSelectedDoctor(d); setTime(null); }} style={{
+                        flex: 1, minWidth: 140, padding: '12px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                        border: `2px solid ${sel ? d.color : '#E2E8F0'}`,
+                        background: sel ? `${d.color}12` : '#fff',
+                        transition: 'all 0.12s',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#fff' }}>{d.short}</span>
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: sel ? d.color : '#334155' }}>{d.name}</div>
+                            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>Suc. {d.consultorio}</div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Días */}
             <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '18px 20px', marginBottom: 16 }}>
@@ -209,20 +256,22 @@ const BookingPage = ({ sucursales, onBack }) => {
               </div>
             )}
 
-            <button
-              onClick={() => { if (selectedDay && selectedTime) setStep(2); }}
-              disabled={!selectedDay || !selectedTime}
-              style={{
-                width: '100%', padding: '16px', borderRadius: 12, border: 'none',
-                cursor: selectedDay && selectedTime ? 'pointer' : 'not-allowed',
-                background: selectedDay && selectedTime ? 'var(--dc-primary)' : '#E2E8F0',
-                color: selectedDay && selectedTime ? '#fff' : '#94A3B8',
-                fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', transition: 'all 0.15s',
-              }}>
-              {selectedDay && selectedTime
-                ? `Continuar — ${dayLabel} a las ${selectedTime}`
-                : 'Selecciona un día y horario para continuar'}
-            </button>
+            {(() => {
+              const needDoctor = docsBySuc.length > 0 && !selectedDoctor;
+              const canContinue = selectedDay && selectedTime && !needDoctor;
+              let hint = 'Selecciona un día y horario para continuar';
+              if (needDoctor) hint = 'Elige un doctor para continuar';
+              else if (canContinue) hint = `Continuar — ${dayLabel} a las ${selectedTime}`;
+              return (
+                <button onClick={() => { if (canContinue) setStep(2); }} disabled={!canContinue} style={{
+                  width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+                  cursor: canContinue ? 'pointer' : 'not-allowed',
+                  background: canContinue ? 'var(--dc-primary)' : '#E2E8F0',
+                  color: canContinue ? '#fff' : '#94A3B8',
+                  fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', transition: 'all 0.15s',
+                }}>{hint}</button>
+              );
+            })()}
           </div>
         )}
 
@@ -240,7 +289,10 @@ const BookingPage = ({ sucursales, onBack }) => {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: '#1E293B' }}>{dayLabel} · {selectedTime}</div>
-                <div style={{ fontSize: 12, color: 'var(--dc-primary)', fontWeight: 600, marginTop: 2 }}>Suc. {sucursal} — {suc[sucursal]?.nombre}</div>
+                <div style={{ fontSize: 12, color: 'var(--dc-primary)', fontWeight: 600, marginTop: 2 }}>
+                  Suc. {sucursal} — {suc[sucursal]?.nombre}
+                  {selectedDoctor && ` · Dr. ${selectedDoctor.name}`}
+                </div>
               </div>
             </div>
 

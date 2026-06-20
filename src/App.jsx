@@ -137,6 +137,7 @@ const App = () => {
     return (
       <BookingPage
         sucursales={sucursales}
+        doctors={doctors}
         onBack={() => navigate('landing')}
       />
     );
