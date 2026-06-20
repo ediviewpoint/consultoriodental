@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import DC_DATA from './components/data';
 import { supabase } from './lib/supabase';
-import { getProfile, getSucursales, getDoctores, saveSucursales } from './lib/db';
+import { getProfile, getSucursales, getDoctores, saveSucursales, getBadgesData } from './lib/db';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
@@ -40,6 +40,7 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [doctors, setDoctors] = useState([]);
+  const [badges, setBadges] = useState({ citasHoy: 0, solicitudes: 0 });
 
   const [screen, setScreen]             = useState(initial);
   const [patientId, setPatientId]       = useState(initial === 'ficha' ? 1 : null);
@@ -59,6 +60,7 @@ const App = () => {
       setDoctors(docs);
       setSucursales(sucs);
       localStorage.setItem('dc_sucursales', JSON.stringify(sucs));
+      getBadgesData().then(setBadges).catch(() => {});
     } catch (err) {
       console.error('Error loading app data:', err);
     }
@@ -159,7 +161,7 @@ const App = () => {
 
   return (
     <div className="app">
-      <Sidebar active={activeNav} onNavigate={navigate} user={currentUser} />
+      <Sidebar active={activeNav} onNavigate={navigate} user={currentUser} badges={badges} />
       <div className="main">
         <Header
           consultorio={consultorio}

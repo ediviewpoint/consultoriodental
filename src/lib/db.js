@@ -478,3 +478,14 @@ export const buscarPacientes = async (q) => {
     avatarColor: p.avatar_color || '#0D9488',
   }));
 };
+
+export const getBadgesData = async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const [r1, r2] = await Promise.all([
+    supabase.from('citas').select('*', { count: 'exact', head: true })
+      .eq('fecha', today).in('estado', ['pendiente', 'confirmada', 'en-curso']),
+    supabase.from('solicitudes').select('*', { count: 'exact', head: true })
+      .eq('estado', 'pendiente'),
+  ]);
+  return { citasHoy: r1.count || 0, solicitudes: r2.count || 0 };
+};

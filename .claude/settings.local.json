@@ -36,7 +36,18 @@
       "PowerShell(Get-Process *)",
       "PowerShell(5173,5174,5175,5176,5177 | ForEach-Object { $port = $_; try { $r = Invoke-WebRequest -Uri \"http://localhost:$port\" -UseBasicParsing -TimeoutSec 2; \"$port -> $\\($r.StatusCode\\) | $\\($r.Content.Substring\\(0,[Math]::Min\\(80,$r.Content.Length\\)\\)\\)\" } catch { \"$port -> ERROR\" } })",
       "PowerShell(Start-Process \"http://localhost:5177\")",
-      "PowerShell(Start-Process \"http://localhost:5177/#booking\")"
+      "PowerShell(Start-Process \"http://localhost:5177/#booking\")",
+      "Bash(Select-String -Path \"dist\\\\assets\\\\index-DXAD4QAW.js\" -Pattern \"supabase\" -SimpleMatch)",
+      "Bash(Select-Object -First 3)",
+      "Read(//mnt/c/Users/ACER/**)",
+      "Bash(railway login *)",
+      "PowerShell(railway login *)",
+      "PowerShell(vercel *)",
+      "PowerShell(npm install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ]
   }
 }

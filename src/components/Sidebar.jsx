@@ -12,8 +12,8 @@ const getSectionsForRole = (role) => {
       items: [
         { id: 'admision',  label: 'Admisión',  icon: Icons.Plus                   },
         { id: 'pacientes', label: 'Pacientes', icon: Icons.Users                  },
-        { id: 'agenda',    label: 'Agenda',    icon: Icons.Calendar, badge: '5'   },
-        { id: 'cobros',    label: 'Cobros',    icon: Icons.Wallet,   badge: 'Hoy' },
+        { id: 'agenda',    label: 'Agenda',    icon: Icons.Calendar },
+        { id: 'cobros',    label: 'Cobros',    icon: Icons.Wallet   },
       ],
     },
     {
@@ -49,7 +49,7 @@ const getSectionsForRole = (role) => {
   return allSections;
 };
 
-const Sidebar = ({ active, onNavigate, user }) => {
+const Sidebar = ({ active, onNavigate, user, badges = {} }) => {
   const sections = getSectionsForRole(user?.role);
   const initials = user ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2) : 'U';
 
@@ -76,7 +76,7 @@ const Sidebar = ({ active, onNavigate, user }) => {
             >
               <it.icon size={17} />
               <span style={{ flex: 1, textAlign: 'left' }}>{it.label}</span>
-              {it.badge && <span className="sb-badge">{it.badge}</span>}
+              {(() => { const v = it.badge ?? (it.id === 'agenda' && badges.citasHoy > 0 ? String(badges.citasHoy) : it.id === 'admision' && badges.solicitudes > 0 ? String(badges.solicitudes) : null); return v ? <span className="sb-badge">{v}</span> : null; })()}
             </button>
           ))}
         </div>
