@@ -331,7 +331,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, alignItems: 'start' }}>
           {/* Recibo con datos reales de sucursal */}
-          <div className="receipt">
+          <div className="receipt" id="cobro-recibo">
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--dc-teal-50)', color: 'var(--dc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Icons.Tooth size={18} />
@@ -387,7 +387,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
           </div>
 
           {/* Acciones */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="cobro-acciones" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Card>
               <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700 }}>Acciones</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

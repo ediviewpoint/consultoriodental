@@ -463,6 +463,12 @@ export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
   if (error) {
     const msg = error.message?.toLowerCase() || '';
     if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      await supabase.rpc('crear_perfil_usuario_existente', {
+        p_email:     email.trim(),
+        p_nombre:    nombre.trim(),
+        p_rol:       rol,
+        p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
+      });
       await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: window.location.origin + window.location.pathname,
       });
@@ -475,6 +481,12 @@ export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
 
   // Supabase devuelve user=null cuando el email ya existe (con "confirm email" activo)
   if (!userId) {
+    await supabase.rpc('crear_perfil_usuario_existente', {
+      p_email:     email.trim(),
+      p_nombre:    nombre.trim(),
+      p_rol:       rol,
+      p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
+    });
     await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: window.location.origin + window.location.pathname,
     });

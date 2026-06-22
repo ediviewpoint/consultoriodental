@@ -708,12 +708,12 @@ a { color: var(--dc-primary); text-decoration: none; }
 .ni-time { font-size: 11px; color: var(--dc-primary); font-weight: 600; margin-top: 3px; }
 
 @media print {
-  .sidebar, .header, .page-head .btn, .page-head button { display: none !important; }
+  .sidebar, .header, .page-head, .cobro-acciones { display: none !important; }
   .app { display: block; }
   .main { display: block; }
   .page { padding: 0; }
   .cobro-grid { display: block; }
-  .receipt { max-width: 100%; border: none; box-shadow: none; padding: 0; font-size: 12px; }
-  .receipt .r-line { font-size: 11px; }
+  #cobro-recibo { max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; font-size: 12px; }
+  #cobro-recibo .r-line { font-size: 11px; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
