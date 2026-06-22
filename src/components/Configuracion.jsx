@@ -190,11 +190,12 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
             });
             setInviteStatus('ok');
           } catch (invErr) {
+            console.error('INVITE ERROR:', invErr, JSON.stringify(invErr));
             if (invErr?.message === 'EMAIL_EXISTS') {
               setInviteStatus('ok_existente');
             } else {
               setInviteStatus('err');
-              setFormErr(invErr?.message || 'Error desconocido');
+              setFormErr(invErr?.message || invErr?.details || invErr?.hint || JSON.stringify(invErr) || 'Error desconocido');
             }
           }
         } else {
