@@ -109,7 +109,7 @@ const PRESET_COLORS = [
 
 const EMPTY_FORM = { nombre: '', iniciales: '', sucursal_id: 'A', pct: 40, color: '#0D9488', email: '' };
 
-const TabDoctores = ({ doctors: doctorsProp = [] }) => {
+const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
   const [doctors,      setDoctors]     = useState(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
   const [saved,        setSaved]       = useState(false);
   const [saving,       setSaving]      = useState(false);
@@ -264,7 +264,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Sucursal {d.consultorio}</div>
+                  <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>{sucursales[d.consultorio]?.nombre || `Sucursal ${d.consultorio}`}</div>
                 </div>
                 <button
                   onClick={() => openEdit(d)}
@@ -401,8 +401,9 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
               </Field>
               <Field label="Sucursal">
                 <select className="select" value={form.sucursal_id} onChange={e => upd('sucursal_id', e.target.value)}>
-                  <option value="A">Sucursal A</option>
-                  <option value="B">Sucursal B</option>
+                  {Object.entries(sucursales).map(([key, s]) => (
+                    <option key={key} value={key}>{s.nombre || `Sucursal ${key}`}</option>
+                  ))}
                 </select>
               </Field>
             </div>
@@ -444,7 +445,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--dc-fg-1)' }}>{form.nombre || 'Nombre del doctor'}</div>
-                <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>Suc. {form.sucursal_id} · Comisión {form.pct}%</div>
+                <div style={{ fontSize: 12, color: 'var(--dc-fg-3)' }}>{sucursales[form.sucursal_id]?.nombre || `Suc. ${form.sucursal_id}`} · Comisión {form.pct}%</div>
               </div>
             </div>
 
@@ -801,7 +802,7 @@ const Configuracion = ({ sucursales, onSaveSucursales, doctors = [], user }) => 
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
         <div style={{ padding: 24 }}>
           {tab === 'catalogo'   && <TabCatalogo />}
-          {tab === 'doctores'   && <TabDoctores doctors={doctors} />}
+          {tab === 'doctores'   && <TabDoctores doctors={doctors} sucursales={sucursales} />}
           {tab === 'sucursales' && <TabSucursales sucursales={sucursales} onSaveSucursales={onSaveSucursales} />}
           {tab === 'usuarios'   && <TabUsuarios doctors={doctors} />}
         </div>

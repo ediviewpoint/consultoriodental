@@ -62,24 +62,21 @@ const Header = ({ consultorio, onConsultorio, user, onNavigate, onLogout, sucurs
       <div className="header-left">
         <div>
           <h1 className="header-title">DentalCare Pro</h1>
-          <div className="header-sub">Suc. {consultorio} · {sucNombre} · Santa Cruz, Bolivia</div>
+          <div className="header-sub">{sucNombre || `Sucursal ${consultorio}`} · Santa Cruz, Bolivia</div>
         </div>
       </div>
 
       <div className="header-right">
         <div className="consultorio-toggle">
-          <button
-            className={consultorio === 'A' ? 'active' : ''}
-            onClick={() => onConsultorio('A')}
-          >
-            Cons. A
-          </button>
-          <button
-            className={consultorio === 'B' ? 'active' : ''}
-            onClick={() => onConsultorio('B')}
-          >
-            Cons. B
-          </button>
+          {Object.entries(clinicSuc).map(([key, s]) => (
+            <button
+              key={key}
+              className={consultorio === key ? 'active' : ''}
+              onClick={() => onConsultorio(key)}
+            >
+              {s.nombre || `Suc. ${key}`}
+            </button>
+          ))}
         </div>
 
         <div style={{ position: 'relative' }}>

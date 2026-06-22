@@ -269,7 +269,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
     }
 
     const msg = encodeURIComponent(
-      `Hola ${sol.nombre} 👋, *confirmamos tu cita* en *DentalCare Pro* (Suc. ${sol.sucursal_id || 'A'}) para el *${fmtISO(sol.fecha)}* a las *${sol.hora}*. ¡Te esperamos!`
+      `Hola ${sol.nombre} 👋, *confirmamos tu cita* en *DentalCare Pro* (${suc[sol.sucursal_id]?.nombre || `Suc. ${sol.sucursal_id || 'A'}`}) para el *${fmtISO(sol.fecha)}* a las *${sol.hora}*. ¡Te esperamos!`
     );
     window.open(`https://wa.me/591${sol.telefono.replace(/\D/g, '')}?text=${msg}`, '_blank');
     setSolicitudes((prev) => prev.filter((s) => s.id !== sol.id));
@@ -439,7 +439,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
                       {fmtISO(sol.fecha)} · {sol.hora}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--dc-fg-2)', marginBottom: 8 }}>
-                      Suc. {sol.sucursal_id} · {sol.motivo}
+                      {suc[sol.sucursal_id]?.nombre || `Suc. ${sol.sucursal_id}`} · {sol.motivo}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <Button size="sm" style={{ flex: 1, fontSize: 11 }} onClick={() => acceptSolicitud(sol)}>
