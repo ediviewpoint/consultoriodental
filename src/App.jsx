@@ -139,25 +139,22 @@ const App = () => {
   // Mantiene la ref actualizada para usarla dentro del listener sin closures viejos
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
-  // Sincroniza el estado con la flecha atrás/adelante del navegador.
-  // Escucha AMBOS eventos: hashchange (cambios directos de hash) y popstate
-  // (navegación del historial). Algunos navegadores solo disparan uno de los dos.
+  // Sincroniza el estado con el botón atrás/adelante del navegador (popstate).
+  // No escuchamos hashchange porque usamos pushState (que no lo dispara).
   useEffect(() => {
     const syncFromUrl = () => {
       const h = (window.location.hash || '').replace('#', '');
       const user = currentUserRef.current;
-      if (VALID_SCREENS.includes(h)) {
+      if (h === 'booking') {
+        setScreen('booking');
+      } else if (VALID_SCREENS.includes(h)) {
         setScreen(canAccess(user?.role, h) ? h : 'dashboard');
-      } else if (!h || h === 'landing') {
+      } else {
         setScreen(user ? 'dashboard' : 'landing');
       }
     };
-    window.addEventListener('hashchange', syncFromUrl);
-    window.addEventListener('popstate',   syncFromUrl);
-    return () => {
-      window.removeEventListener('hashchange', syncFromUrl);
-      window.removeEventListener('popstate',   syncFromUrl);
-    };
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect to dashboard if restored session lands on a forbidden screen or public screen

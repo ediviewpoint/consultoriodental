@@ -80,10 +80,7 @@ const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
 
   // ── Transiciones entre pasos ──────────────────────────────────────
 
-  const canStep1 = docsBySuc.length === 0 || selectedDoctor !== null;
-
   const goStep2 = () => {
-    if (!canStep1) return;
     setSelectedDay(null);
     setTime(null);
     setStep(2);
