@@ -516,16 +516,18 @@ export const getBadgesData = async () => {
 };
 
 // ── Cobro ─────────────────────────────────────────────────────────────────────
-export const createPago = async ({ pacienteId, monto, metodo, banco, tratamiento, reciboRef }) => {
+export const createPago = async ({ pacienteId, doctorId, sucursalId, monto, metodo, banco, tratamiento, reciboRef }) => {
   const today = new Date().toISOString().split('T')[0];
   const { data, error } = await supabase.from('pagos').insert({
-    paciente_id: pacienteId || null,
+    paciente_id:   pacienteId  || null,
+    doctor_id:     doctorId    || null,
+    sucursal_id:   sucursalId  || null,
     fecha: today,
     monto,
     metodo,
-    banco_id: banco || null,
-    numero_recibo: reciboRef || null,
-    tratamiento: tratamiento || null,
+    banco_id:      banco       || null,
+    numero_recibo: reciboRef   || null,
+    tratamiento:   tratamiento || null,
   }).select().single();
   if (error) throw error;
   return data;
@@ -656,7 +658,7 @@ export const getEvoluciones = async (pacienteId) => {
   return (data || []).map(e => ({
     id: e.id,
     fecha: e.fecha,
-    doctor: e.doctor_nombre || '—',
+    doctor: e.doctor || '—',
     motivo: e.motivo || '',
     hallazgos: e.hallazgos || '',
     procedimiento: e.procedimiento || '',
@@ -670,7 +672,7 @@ export const createEvolucion = async (pacienteId, entry, doctorId) => {
   const { data, error } = await supabase.from('evoluciones').insert({
     paciente_id: pacienteId,
     doctor_id: doctorId || null,
-    doctor_nombre: entry.doctor || null,
+    doctor: entry.doctor || null,
     fecha: entry.fecha,
     motivo: entry.motivo || null,
     hallazgos: entry.hallazgos || null,
@@ -692,9 +694,9 @@ export const getRecetas = async (pacienteId) => {
   return (data || []).map(r => ({
     id: r.id,
     fecha: r.fecha,
-    doctor: r.doctor_nombre || '—',
+    doctor: r.doctor || '—',
     items: r.items || [],
-    observaciones: r.observaciones || '',
+    observaciones: r.indicaciones || '',
   }));
 };
 
@@ -702,10 +704,10 @@ export const createReceta = async (pacienteId, receta, doctorId) => {
   const { data, error } = await supabase.from('recetas').insert({
     paciente_id: pacienteId,
     doctor_id: doctorId || null,
-    doctor_nombre: receta.doctor || null,
+    doctor: receta.doctor || null,
     fecha: receta.fecha,
     items: receta.items,
-    observaciones: receta.observaciones || null,
+    indicaciones: receta.observaciones || null,
   }).select('id').single();
   if (error) throw error;
   return { ...receta, id: data.id };
