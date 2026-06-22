@@ -119,7 +119,7 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
   const [submitting,   setSubmitting]  = useState(false);
   const [formErr,      setFormErr]     = useState('');
   const [deleting,     setDeleting]    = useState(null);
-  const [inviteStatus, setInviteStatus]= useState(null); // null | 'ok' | 'err'
+  const [inviteStatus, setInviteStatus]= useState(null); // null | 'ok' | 'ok_existente' | 'err'
 
   useEffect(() => {
     setDoctors(doctorsProp.map(d => ({ ...d, pct: Math.round(d.comision * 100) })));
@@ -190,14 +190,10 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
             });
             setInviteStatus('ok');
           } catch (invErr) {
-            // El doctor YA fue guardado — cerrar modal para evitar que el usuario
-            // intente guardar de nuevo y genere un duplicado
-            setModal(false);
-            setForm(EMPTY_FORM);
             if (invErr?.message === 'EMAIL_EXISTS') {
-              setFormErr('El doctor fue guardado. El correo ya tiene una cuenta — se le envió un enlace para establecer su contraseña.');
+              setInviteStatus('ok_existente');
             } else {
-              setFormErr('El doctor fue guardado. Hubo un problema enviando la invitación — invítalo desde la sección "Accesos al sistema".');
+              setInviteStatus('err');
             }
           }
         } else {
@@ -348,6 +344,20 @@ const TabDoctores = ({ doctors: doctorsProp = [] }) => {
             </div>
             <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
               Se envió un correo a <strong>{form.email}</strong> con un enlace para que el doctor establezca su contraseña y acceda al sistema con rol <strong>Doctor</strong>.
+            </div>
+          </div>
+        )}
+
+        {inviteStatus === 'ok_existente' && (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Icons.CheckCircle size={26} style={{ color: '#059669' }} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#134E4A', marginBottom: 8 }}>
+              ¡Doctor registrado!
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
+              El correo <strong>{form.email}</strong> ya tenía una cuenta en el sistema. Se configuró el acceso como <strong>Doctor</strong> y se le envió un enlace para iniciar sesión.
             </div>
           </div>
         )}
