@@ -14,6 +14,7 @@ import Presupuestos from './components/Presupuestos';
 import Liquidacion from './components/Liquidacion';
 import Admision from './components/Admision';
 import Login from './components/Login';
+import SetPassword from './components/SetPassword';
 import BookingPage from './components/BookingPage';
 import Landing from './components/Landing';
 
@@ -38,6 +39,7 @@ const initial = (() => {
 const App = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [recovery,    setRecovery]    = useState(false);
   const [doctors, setDoctors] = useState([]);
   const [badges, setBadges] = useState({ citasHoy: 0, solicitudes: 0 });
 
@@ -70,6 +72,12 @@ const App = () => {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      // Link de recovery/invitación: el hash contiene type=recovery
+      if (window.location.hash.includes('type=recovery')) {
+        setRecovery(true);
+        setAuthLoading(false);
+        return;
+      }
       if (session) {
         try {
           const profile = await getProfile(session.user.id);
@@ -83,7 +91,13 @@ const App = () => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecovery(true);
+        setAuthLoading(false);
+        return;
+      }
       if (event === 'SIGNED_IN' && session) {
+        setRecovery(false);
         try {
           const profile = await getProfile(session.user.id);
           setCurrentUser(profile);
@@ -195,6 +209,10 @@ const App = () => {
         onBack={() => goBack('landing')}
       />
     );
+  }
+
+  if (recovery) {
+    return <SetPassword onDone={() => { setRecovery(false); window.history.replaceState(null, '', window.location.pathname); }} />;
   }
 
   if (authLoading) {
