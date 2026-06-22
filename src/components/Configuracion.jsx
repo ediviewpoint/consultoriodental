@@ -194,6 +194,7 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
               setInviteStatus('ok_existente');
             } else {
               setInviteStatus('err');
+              setFormErr(invErr?.message || 'Error desconocido');
             }
           }
         } else {
@@ -373,6 +374,11 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
             <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
               El perfil del doctor fue creado. Puedes enviar el correo manualmente desde la pestaña <strong>Usuarios → Restablecer contraseña</strong>.
             </div>
+            {formErr && (
+              <div style={{ marginTop: 12, fontSize: 11, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', textAlign: 'left', fontFamily: 'var(--dc-font-mono)', wordBreak: 'break-all' }}>
+                Error: {formErr}
+              </div>
+            )}
           </div>
         )}
 
