@@ -39,7 +39,7 @@ const initial = (() => {
 const App = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [recovery,    setRecovery]    = useState(false);
+  const [recovery,    setRecovery]    = useState(() => window.location.hash.includes('type=recovery'));
   const [doctors, setDoctors] = useState([]);
   const [badges, setBadges] = useState({ citasHoy: 0, solicitudes: 0 });
 
@@ -180,7 +180,7 @@ const App = () => {
       window.history.replaceState(null, '', '#' + target);
     } else {
       navCountRef.current += 1;
-      window.location.hash = target;
+      window.history.pushState(null, '', '#' + target);
     }
   };
 
@@ -197,6 +197,10 @@ const App = () => {
   const openPatient = (id) => navigate('ficha', { patientId: id });
   const activeNav   = screen === 'ficha' ? 'pacientes' : screen;
 
+  if (recovery) {
+    return <SetPassword onDone={() => { setRecovery(false); window.history.replaceState(null, '', window.location.pathname); }} />;
+  }
+
   if (screen === 'landing') {
     return <Landing onNavigate={navigate} sucursales={sucursales} />;
   }
@@ -209,10 +213,6 @@ const App = () => {
         onBack={() => goBack('landing')}
       />
     );
-  }
-
-  if (recovery) {
-    return <SetPassword onDone={() => { setRecovery(false); window.history.replaceState(null, '', window.location.pathname); }} />;
   }
 
   if (authLoading) {

@@ -128,7 +128,7 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
   const updPct = (id, pct) => setDoctors(prev => prev.map(d => d.id === id ? { ...d, pct } : d));
   const upd    = (k, v)    => setForm(f => ({ ...f, [k]: v }));
 
-  const openCreate = () => { setEditingId(null); setForm(EMPTY_FORM); setFormErr(''); setInviteStatus(null); setModal(true); };
+  const openCreate = () => { setEditingId(null); setForm({ ...EMPTY_FORM, sucursal_id: Object.keys(sucursales)[0] || 'A' }); setFormErr(''); setInviteStatus(null); setModal(true); };
   const openEdit   = (d) => {
     setEditingId(d.id);
     setForm({ nombre: d.name, iniciales: d.short, sucursal_id: d.consultorio, pct: d.pct, color: d.color, email: '' });
@@ -190,13 +190,8 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
             });
             setInviteStatus('ok');
           } catch (invErr) {
-            console.error('INVITE ERROR:', invErr, JSON.stringify(invErr));
-            if (invErr?.message === 'EMAIL_EXISTS') {
-              setInviteStatus('ok_existente');
-            } else {
-              setInviteStatus('err');
-              setFormErr(invErr?.message || invErr?.details || invErr?.hint || JSON.stringify(invErr) || 'Error desconocido');
-            }
+            setInviteStatus('err');
+            setFormErr(invErr?.message || 'Error desconocido');
           }
         } else {
           setModal(false);
@@ -336,30 +331,16 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
         }
       >
         {/* Pantalla de resultado de invitación */}
-        {inviteStatus === 'ok' && (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <Icons.Mail size={26} style={{ color: 'var(--dc-primary)' }} />
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#134E4A', marginBottom: 8 }}>
-              ¡Doctor registrado e invitación enviada!
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
-              Se envió un correo a <strong>{form.email}</strong> con un enlace para que el doctor establezca su contraseña y acceda al sistema con rol <strong>Doctor</strong>.
-            </div>
-          </div>
-        )}
-
-        {inviteStatus === 'ok_existente' && (
+        {(inviteStatus === 'ok' || inviteStatus === 'ok_existente') && (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
             <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
               <Icons.CheckCircle size={26} style={{ color: '#059669' }} />
             </div>
             <div style={{ fontWeight: 700, fontSize: 16, color: '#134E4A', marginBottom: 8 }}>
-              ¡Doctor registrado!
+              ¡Doctor registrado e invitación enviada!
             </div>
             <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
-              El correo <strong>{form.email}</strong> ya tenía una cuenta en el sistema. Se configuró el acceso como <strong>Doctor</strong> y se le envió un enlace para iniciar sesión.
+              Se envió un correo a <strong>{form.email}</strong> con un enlace para que establezca su contraseña y acceda al sistema con rol <strong>Doctor</strong>.
             </div>
           </div>
         )}
@@ -373,7 +354,7 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
               Doctor agregado, pero falló el envío del correo
             </div>
             <div style={{ fontSize: 13, color: 'var(--dc-fg-3)', lineHeight: 1.6 }}>
-              El perfil del doctor fue creado. Puedes enviar el correo manualmente desde la pestaña <strong>Usuarios → Restablecer contraseña</strong>.
+              El perfil del doctor fue creado correctamente. Puedes reintentar el envío desde <strong>Usuarios → Invitar usuario</strong>.
             </div>
             {formErr && (
               <div style={{ marginTop: 12, fontSize: 11, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', textAlign: 'left', fontFamily: 'var(--dc-font-mono)', wordBreak: 'break-all' }}>
@@ -628,7 +609,7 @@ const TabUsuarios = ({ doctors = [] }) => {
       setInvForm(INVITE_EMPTY);
       getPerfiles().then(setPerfiles).catch(console.error);
     } catch (err) {
-      setInvErr(err?.message === 'EMAIL_EXISTS' || err?.message?.toLowerCase().includes('already') ? 'Este correo ya tiene una cuenta. Se le envió un enlace para establecer su contraseña.' : 'Error al enviar la invitación. Intenta de nuevo.');
+      setInvErr(err?.message || 'Error al enviar la invitación. Intenta de nuevo.');
       console.error(err);
     } finally {
       setInviting(false);
