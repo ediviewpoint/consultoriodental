@@ -493,15 +493,15 @@ export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
     throw new Error('EMAIL_EXISTS');
   }
 
-  const { error: pErr } = await supabase.from('perfiles').insert({
-    id: userId, nombre: nombre.trim(), rol,
-    doctor_id: rol === 'doctor' ? (doctorId || null) : null,
+  // Usamos el RPC (SECURITY DEFINER) para crear el perfil y bypassear RLS,
+  // ya que perfiles no tiene política de INSERT para usuarios autenticados.
+  const { error: pErr } = await supabase.rpc('crear_perfil_usuario_existente', {
+    p_email:     email.trim(),
+    p_nombre:    nombre.trim(),
+    p_rol:       rol,
+    p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
   });
-  // 23505 = unique constraint: perfiles ya existe para este usuario
-  if (pErr) {
-    if (pErr.code === '23505') throw new Error('EMAIL_EXISTS');
-    throw pErr;
-  }
+  if (pErr) throw pErr;
 
   await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: window.location.origin + window.location.pathname,
