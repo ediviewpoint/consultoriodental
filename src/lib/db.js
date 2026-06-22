@@ -448,66 +448,31 @@ export const updatePerfil = async (id, updates) => {
 };
 
 export const sendPasswordReset = async (email) => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw error;
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/api/reset', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+    },
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Error al enviar reset');
 };
 
 export const inviteNewUser = async ({ email, nombre, rol, doctorId }) => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  const tempPass = Array.from(crypto.getRandomValues(new Uint8Array(14)))
-    .map(b => chars[b % chars.length]).join('') + 'Aa1!';
-
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: tempPass });
-
-  // Error explícito de email ya registrado
-  if (error) {
-    const msg = error.message?.toLowerCase() || '';
-    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
-      await supabase.rpc('crear_perfil_usuario_existente', {
-        p_email:     email.trim(),
-        p_nombre:    nombre.trim(),
-        p_rol:       rol,
-        p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
-      });
-      await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: window.location.origin + window.location.pathname,
-      });
-      throw new Error('EMAIL_EXISTS');
-    }
-    throw error;
-  }
-
-  const userId = data.user?.id;
-
-  // Supabase devuelve user=null cuando el email ya existe (con "confirm email" activo)
-  if (!userId) {
-    await supabase.rpc('crear_perfil_usuario_existente', {
-      p_email:     email.trim(),
-      p_nombre:    nombre.trim(),
-      p_rol:       rol,
-      p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
-    });
-    await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin + window.location.pathname,
-    });
-    throw new Error('EMAIL_EXISTS');
-  }
-
-  // Usamos el RPC (SECURITY DEFINER) para crear el perfil y bypassear RLS,
-  // ya que perfiles no tiene política de INSERT para usuarios autenticados.
-  const { error: pErr } = await supabase.rpc('crear_perfil_usuario_existente', {
-    p_email:     email.trim(),
-    p_nombre:    nombre.trim(),
-    p_rol:       rol,
-    p_doctor_id: rol === 'doctor' ? (doctorId || null) : null,
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/api/invite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+    },
+    body: JSON.stringify({ email, nombre, rol, doctorId }),
   });
-  if (pErr) throw pErr;
-
-  await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: window.location.origin + window.location.pathname,
-  });
-
-  return userId;
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Error al enviar invitación');
 };
 
 export const buscarPorCI = async (ci) => {
