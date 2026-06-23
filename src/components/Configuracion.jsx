@@ -478,7 +478,11 @@ const TabDoctores = ({ doctors: doctorsProp = [], sucursales = {} }) => {
 // ── Tab: Sucursales ──────────────────────────────────────────────────────────
 const TabSucursales = ({ sucursales: sucProp, onSaveSucursales }) => {
   const initSuc = sucProp || {};
-  const [sucursales, setSucursales] = useState({ A: { ...initSuc.A }, B: { ...initSuc.B } });
+  const [sucursales, setSucursales] = useState(() =>
+    Object.keys(initSuc).length > 0
+      ? Object.fromEntries(Object.entries(initSuc).map(([k, v]) => [k, { ...v }]))
+      : { A: {}, B: {} }
+  );
   const [saved, setSaved]   = useState(false);
   const [saving, setSaving] = useState(false);
   const upd = (k, field, val) => setSucursales(prev => ({ ...prev, [k]: { ...prev[k], [field]: val } }));
@@ -507,7 +511,7 @@ const TabSucursales = ({ sucursales: sucProp, onSaveSucursales }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        {['A', 'B'].map(k => {
+        {Object.keys(sucursales).map(k => {
           const s = sucursales[k] || {};
           return (
             <Card key={k} pad="lg">
