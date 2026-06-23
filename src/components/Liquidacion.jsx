@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Icons } from './icons';
 import { Button, Card, CardHead, fmtBs } from './ui';
-import { getCitasCompletadas, getCitasHistorial, getCatalogo, getLiquidacion, marcarLiquidacion } from '../lib/db';
+import { getCitasCompletadas, getCitasHistorial, getCatalogo, getLiquidaciones, marcarLiquidacion } from '../lib/db';
 
 // ── Utilidades de fecha ───────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2, '0');
@@ -193,10 +193,11 @@ const LiquidacionAdmin = ({ user, doctors }) => {
   const [citas, setCitas]           = useState([]);
   const [catalogo, setCatalogo]     = useState([]);
   const [loading, setLoading]       = useState(false);
-  const [liquidado, setLiquidado]   = useState(false);
-  const [liquidando, setLiquidando] = useState(false);
+  const [liquidaciones,  setLiquidaciones]  = useState([]);
+  const [liquidando,     setLiquidando]     = useState(false);
+  const [errorLiquidar,  setErrorLiquidar]  = useState(null);
 
-  const periodosLiquidacion = buildPeriodos();
+  const [periodosLiquidacion] = useState(() => buildPeriodos());
 
   useEffect(() => {
     getCatalogo().then(setCatalogo).catch(console.error);
@@ -218,28 +219,35 @@ const LiquidacionAdmin = ({ user, doctors }) => {
   }, [periodoIdx, doctorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    setLiquidado(false);
-    if (!periodo || !doctorId) return;
-    getLiquidacion(periodo.id, doctorId)
-      .then(data => setLiquidado(data?.liquidado ?? false))
-      .catch(() => {});
-  }, [periodoIdx, doctorId]); // eslint-disable-line react-hooks/exhaustive-deps
+    getLiquidaciones().then(setLiquidaciones).catch(console.error);
+  }, []);
+
+  const doctor = doctors.find(d => d.id === doctorId);
+
+  const yaLiquidado = liquidaciones.some(
+    l => l.periodo === periodo?.id && l.doctor_id === doctorId && l.liquidado
+  );
 
   const handleLiquidar = async () => {
     if (!periodo || !doctorId) return;
+    const confirmar = window.confirm(
+      `¿Marcar el período "${periodo.label}" como liquidado para ${doctor?.name || 'el doctor seleccionado'}?`
+    );
+    if (!confirmar) return;
     setLiquidando(true);
+    setErrorLiquidar(null);
     try {
-      await marcarLiquidacion(periodo.id, doctorId);
-      setLiquidado(true);
+      await marcarLiquidacion({ periodo: periodo.id, doctor_id: doctorId });
+      const updated = await getLiquidaciones();
+      setLiquidaciones(updated);
     } catch (err) {
       console.error('Error al liquidar:', err);
-      alert('No se pudo registrar la liquidación. Intenta de nuevo.');
+      setErrorLiquidar('Error al liquidar. Intenta de nuevo.');
     } finally {
       setLiquidando(false);
     }
   };
 
-  const doctor   = doctors.find(d => d.id === doctorId);
   const docColor = doctor?.color || 'var(--dc-primary)';
   const pct      = Math.round((doctor?.comision ?? 0) * 100);
 
@@ -415,9 +423,10 @@ const LiquidacionAdmin = ({ user, doctors }) => {
           <Button variant="secondary" icon={Icons.Download} onClick={() => window.print()}>
             Exportar liquidación
           </Button>
-          <Button icon={Icons.Check} onClick={handleLiquidar} disabled={liquidado || liquidando}>
-            {liquidado ? 'Quincena liquidada ✓' : liquidando ? 'Guardando…' : 'Marcar quincena como liquidada'}
+          <Button icon={Icons.Check} onClick={handleLiquidar} disabled={liquidando || yaLiquidado}>
+            {liquidando ? 'Liquidando…' : yaLiquidado ? '✅ Ya liquidado' : 'Marcar quincena como liquidada'}
           </Button>
+          {errorLiquidar && <p className="error-msg" style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--dc-alert)' }}>{errorLiquidar}</p>}
         </div>
       )}
     </div>

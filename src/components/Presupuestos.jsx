@@ -36,8 +36,8 @@ const STATUS_NEXT = {
   vencido:   [],
 };
 
-const getToday  = () => new Date().toLocaleDateString('es-BO');
-const getExpiry = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toLocaleDateString('es-BO'); };
+const calcToday  = () => new Date().toLocaleDateString('es-BO');
+const calcExpiry = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toLocaleDateString('es-BO'); };
 
 // ── Quote document (reutilizable en builder preview y modal) ─────────────────
 const QuoteDoc = ({ q, compact = false }) => {
@@ -150,9 +150,11 @@ const QuoteDoc = ({ q, compact = false }) => {
 
 // ── Builder de presupuesto ───────────────────────────────────────────────────
 const QuoteBuilder = ({ onSave, onCancel, patients, doctors, catalog }) => {
+  const today  = useMemo(calcToday,  []);
+  const expiry = useMemo(calcExpiry, []);
   const [form, setForm]           = useState({
     pacienteId: '', doctor: '', consultorio: 'A',
-    fecha: getToday(), vencimiento: getExpiry(),
+    fecha: today, vencimiento: expiry,
     items: [], descuentoGlobal: 0, planPago: 'contado', notas: '',
   });
   const [catQuery, setCatQuery]   = useState('');
@@ -594,7 +596,7 @@ const Presupuestos = () => {
   };
 
   const handleDuplicate = async (q) => {
-    const copy = { ...q, estado: 'borrador', fecha: getToday(), vencimiento: getExpiry() };
+    const copy = { ...q, estado: 'borrador', fecha: calcToday(), vencimiento: calcExpiry() };
     try {
       const saved = await createPresupuesto(copy);
       setQuotes(prev => [saved, ...prev]);
