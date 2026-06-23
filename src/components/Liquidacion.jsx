@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Icons } from './icons';
 import { Button, Card, CardHead, fmtBs } from './ui';
-import { getCitasCompletadas, getCitasHistorial, getCatalogo } from '../lib/db';
+import { getCitasCompletadas, getCitasHistorial, getCatalogo, getLiquidacion, marcarLiquidacion } from '../lib/db';
 
 // ── Utilidades de fecha ───────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2, '0');
@@ -193,6 +193,8 @@ const LiquidacionAdmin = ({ user, doctors }) => {
   const [citas, setCitas]           = useState([]);
   const [catalogo, setCatalogo]     = useState([]);
   const [loading, setLoading]       = useState(false);
+  const [liquidado, setLiquidado]   = useState(false);
+  const [liquidando, setLiquidando] = useState(false);
 
   useEffect(() => {
     getCatalogo().then(setCatalogo).catch(console.error);
@@ -212,6 +214,28 @@ const LiquidacionAdmin = ({ user, doctors }) => {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [periodoIdx, doctorId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setLiquidado(false);
+    if (!periodo || !doctorId) return;
+    getLiquidacion(periodo.id, doctorId)
+      .then(data => setLiquidado(data?.liquidado ?? false))
+      .catch(() => {});
+  }, [periodoIdx, doctorId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLiquidar = async () => {
+    if (!periodo || !doctorId) return;
+    setLiquidando(true);
+    try {
+      await marcarLiquidacion(periodo.id, doctorId);
+      setLiquidado(true);
+    } catch (err) {
+      console.error('Error al liquidar:', err);
+      alert('No se pudo registrar la liquidación. Intenta de nuevo.');
+    } finally {
+      setLiquidando(false);
+    }
+  };
 
   const doctor   = doctors.find(d => d.id === doctorId);
   const docColor = doctor?.color || 'var(--dc-primary)';
@@ -389,8 +413,8 @@ const LiquidacionAdmin = ({ user, doctors }) => {
           <Button variant="secondary" icon={Icons.Download} onClick={() => window.print()}>
             Exportar liquidación
           </Button>
-          <Button icon={Icons.Check}>
-            Marcar quincena como liquidada
+          <Button icon={Icons.Check} onClick={handleLiquidar} disabled={liquidado || liquidando}>
+            {liquidado ? 'Quincena liquidada ✓' : liquidando ? 'Guardando…' : 'Marcar quincena como liquidada'}
           </Button>
         </div>
       )}
