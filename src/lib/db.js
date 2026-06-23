@@ -408,14 +408,12 @@ export const createConsentimiento = async (pacienteId, doc) => {
 export const getDeudaViva = async () => {
   const { data: planes, error } = await supabase
     .from('planes_tratamiento')
-    .select('id, titulo, monto_total, paciente_id, pacientes(nombre, apellidos, tel, avatar, avatar_color)')
+    .select('id, titulo, monto_total, paciente_id, pacientes(nombre, apellidos, tel, avatar, avatar_color), abonos(monto)')
     .gt('monto_total', 0);
   if (error) throw error;
 
-  const withSaldo = await Promise.all((planes || []).map(async (plan) => {
-    const { data: abonos } = await supabase
-      .from('abonos').select('monto').eq('plan_id', plan.id);
-    const pagado = (abonos || []).reduce((s, a) => s + Number(a.monto), 0);
+  return (planes || []).map((plan) => {
+    const pagado = (plan.abonos || []).reduce((s, a) => s + Number(a.monto), 0);
     const saldo  = Number(plan.monto_total) - pagado;
     if (saldo <= 0) return null;
     return {
@@ -430,9 +428,28 @@ export const getDeudaViva = async () => {
       pagado,
       saldo,
     };
-  }));
+  }).filter(Boolean).sort((a, b) => b.saldo - a.saldo);
+};
 
-  return withSaldo.filter(Boolean).sort((a, b) => b.saldo - a.saldo);
+// ── Liquidaciones ────────────────────────────────────────────────
+export const getLiquidacion = async (periodo, doctorId) => {
+  const { data } = await supabase
+    .from('liquidaciones')
+    .select('liquidado, fecha_liquidacion')
+    .eq('periodo', periodo)
+    .eq('doctor_id', doctorId)
+    .maybeSingle();
+  return data;
+};
+
+export const marcarLiquidacion = async (periodo, doctorId) => {
+  const { error } = await supabase
+    .from('liquidaciones')
+    .upsert(
+      { periodo, doctor_id: doctorId, liquidado: true, fecha_liquidacion: new Date().toISOString() },
+      { onConflict: 'periodo,doctor_id' }
+    );
+  if (error) throw error;
 };
 
 // ── Perfiles / Usuarios ───────────────────────────────────────────
