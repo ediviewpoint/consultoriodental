@@ -255,7 +255,8 @@ export const getOcupadosDia = async (fecha, doctorId = null) => {
     q1 = q1.eq('doctor_id', doctorId);
     q2 = q2.eq('doctor_id', doctorId);
   }
-  const [{ data: s }, { data: c }] = await Promise.all([q1, q2]);
+  const [{ data: s, error: e1 }, { data: c, error: e2 }] = await Promise.all([q1, q2]);
+  if (e1 || e2) throw e1 || e2;
   return new Set([...((s || []).map(x => x.hora)), ...((c || []).map(x => x.hora))]);
 };
 
