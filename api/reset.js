@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 
 export default async function handler(req, res) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173'
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://consultorio-dental-24jf5kuaw-edi-s-projects2.vercel.app'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
