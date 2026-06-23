@@ -140,17 +140,18 @@ const App = () => {
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   // Sincroniza el estado con el botón atrás/adelante del navegador (popstate).
-  // No escuchamos hashchange porque usamos pushState (que no lo dispara).
+  // No escuchamos hashchange porque usamos pushState directamente
+  // para evitar el doble disparo que causaba duplicados en el historial.
   useEffect(() => {
     const syncFromUrl = () => {
       const h = (window.location.hash || '').replace('#', '');
       const user = currentUserRef.current;
-      if (h === 'booking') {
-        setScreen('booking');
-      } else if (VALID_SCREENS.includes(h)) {
+      if (VALID_SCREENS.includes(h)) {
         setScreen(canAccess(user?.role, h) ? h : 'dashboard');
-      } else {
+      } else if (!h || h === 'landing') {
         setScreen(user ? 'dashboard' : 'landing');
+      } else if (h === 'booking') {
+        setScreen('booking');
       }
     };
     window.addEventListener('popstate', syncFromUrl);
@@ -174,10 +175,10 @@ const App = () => {
     setPatientId(target === 'ficha' ? (opts.patientId || patientId || 1) : null);
     if (target === 'cobros') setCobroPatient(opts.patient || null);
     if (opts.replace) {
-      window.history.replaceState(null, '', '#' + target);
+      window.history.replaceState({ screen: target }, '', '#' + target);
     } else {
       navCountRef.current += 1;
-      window.history.pushState(null, '', '#' + target);
+      window.history.pushState({ screen: target }, '', '#' + target);
     }
   };
 
