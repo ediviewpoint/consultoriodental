@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Icons } from './icons';
 import { Button, Modal, Field, Badge } from './ui';
-import { getCitas, createCita, updateCitaEstado, getPacientes, getSolicitudesPendientes, updateSolicitudEstado, getCatalogo } from '../lib/db';
+import { getCitas, createCita, updateCitaEstado, getPacientes, getSolicitudesPendientes, updateSolicitudEstado, getCatalogo, getOcupadosDia } from '../lib/db';
 
 // Genera semana anterior / actual / siguiente basadas en la fecha real de hoy
 const buildWeeks = () => {
@@ -159,6 +159,17 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
     if (!nombre || !dia) return;
     const docObj = doctors.find(d => d.name === form.doctor);
     const patObj = patients.find(p => `${p.nombre} ${p.apellidos}` === nombre);
+    if (docObj?.id) {
+      try {
+        const ocupados = await getOcupadosDia(form.fecha, docObj.id);
+        if (ocupados.has(form.hora)) {
+          alert(`${docObj.name} ya tiene una cita a las ${form.hora} ese día.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error verificando disponibilidad:', err);
+      }
+    }
     try {
       const newCita = await createCita({
         paciente_nombre: nombre,
@@ -250,6 +261,13 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
       const docObj = sol.doctor_id
         ? doctors.find(d => d.id === sol.doctor_id) ?? doctors[0]
         : doctors[0];
+      if (docObj?.id) {
+        const ocupados = await getOcupadosDia(sol.fecha, docObj.id);
+        if (ocupados.has(sol.hora)) {
+          alert(`${docObj.name} ya tiene una cita a las ${sol.hora} ese día. Rechaza la solicitud y propone otro horario.`);
+          return;
+        }
+      }
       const newCita = await createCita({
         paciente_nombre: sol.nombre,
         paciente_id:     null,
