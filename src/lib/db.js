@@ -30,7 +30,7 @@ export const saveSucursales = async (suc) => {
 
 // ── Doctores ──────────────────────────────────────────────────────
 export const getDoctores = async () => {
-  const { data, error } = await supabase.from('doctores').select('*').order('id');
+  const { data, error } = await supabase.from('doctores').select('*').eq('activo', true).order('id');
   if (error) throw error;
   return data.map(d => ({
     id: d.id, name: d.nombre, short: d.iniciales,
@@ -63,7 +63,7 @@ export const updateDoctor = async (id, { nombre, iniciales, sucursal_id, comisio
 };
 
 export const deleteDoctor = async (id) => {
-  const { error } = await supabase.from('doctores').delete().eq('id', id);
+  const { error } = await supabase.from('doctores').update({ activo: false }).eq('id', id);
   if (error) throw error;
 };
 
