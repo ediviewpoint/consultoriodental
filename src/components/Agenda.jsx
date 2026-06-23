@@ -43,7 +43,6 @@ const buildWeeks = () => {
   });
 };
 
-const WEEKS        = buildWeeks();
 const ESTADO_ORDER = ['pendiente', 'confirmada', 'en-curso', 'completada', 'cancelada'];
 
 const citaToAppt = (c) => {
@@ -83,12 +82,13 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   const doctorObj = isDoctor ? doctors.find((d) => d.id === user.doctorId) : null;
   const defDoctor = doctorObj?.name ?? doctors[0]?.name ?? '';
 
+  const [weeks, setWeeks]               = useState(buildWeeks);
   const [weekIdx, setWeekIdx]           = useState(1);
   const [modal, setModal]               = useState(false);
   const [doctorFilter, setDoctorFilter] = useState(isDoctor && doctorObj ? doctorObj.name : 'todos');
   const [appts, setAppts]               = useState([]);
   const [loadingCitas, setLoadingCitas] = useState(false);
-  const [form, setForm]                 = useState(makeEmpty(defDoctor, WEEKS[1].minDate));
+  const [form, setForm]                 = useState(() => makeEmpty(defDoctor, buildWeeks()[1].minDate));
   const [saved, setSaved]               = useState(false);
   const [detailAppt, setDetailAppt]     = useState(null);
   const [patients, setPatients]         = useState([]);
@@ -101,7 +101,7 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
   const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
   const ROW_H = 52;
 
-  const week        = WEEKS[weekIdx];
+  const week        = weeks[weekIdx];
   const DATE_TO_DAY = week.dateMap;
 
   // Load citas for the current week
@@ -331,9 +331,9 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {saved && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dc-positive)' }}>✓ Cita guardada</span>}
-          <Button variant="secondary" icon={Icons.ChevronL} size="sm" onClick={() => setWeekIdx((i) => Math.max(0, i - 1))} />
-          <Button variant="secondary" size="sm" onClick={() => setWeekIdx(1)}>Hoy</Button>
-          <Button variant="secondary" icon={Icons.ChevronR} size="sm" onClick={() => setWeekIdx((i) => Math.min(2, i + 1))} />
+          <Button variant="secondary" icon={Icons.ChevronL} size="sm" onClick={() => { setWeeks(buildWeeks()); setWeekIdx((i) => Math.max(0, i - 1)); }} />
+          <Button variant="secondary" size="sm" onClick={() => { setWeeks(buildWeeks()); setWeekIdx(1); }}>Hoy</Button>
+          <Button variant="secondary" icon={Icons.ChevronR} size="sm" onClick={() => { setWeeks(buildWeeks()); setWeekIdx((i) => Math.min(2, i + 1)); }} />
           <Button icon={Icons.Plus} onClick={() => setModal(true)}>Nueva cita</Button>
         </div>
       </div>
@@ -401,12 +401,12 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
             {[1, 2, 3, 4, 5, 6].map((dayN) => (
               <div key={dayN} className="day-col" style={{ position: 'relative' }}>
                 {HOURS.map((h) => <div key={h} className="day-cell" />)}
-                {filteredAppts.filter((a) => a.dia === dayN).map((a, i) => {
+                {filteredAppts.filter((a) => a.dia === dayN).map((a) => {
                   const top    = (a.hora - 8) * ROW_H;
                   const height = (a.dur || 1) * ROW_H - 4;
                   return (
                     <div
-                      key={i}
+                      key={a._id || `${a.dia}-${a.hora}-${a.paciente}`}
                       className={`appt ${a.estado}`}
                       style={{ top: `${top + 2}px`, height: `${height}px`, cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
                       onClick={() => setDetailAppt(a)}

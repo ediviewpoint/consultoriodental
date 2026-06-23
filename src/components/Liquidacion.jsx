@@ -30,7 +30,7 @@ const buildPeriodos = () => {
   return result;
 };
 
-const PERIODOS_LIQUIDACION = buildPeriodos();
+// buildPeriodos y buildPeriodosDoctor se llaman dentro de los componentes para evitar fechas obsoletas
 
 // Períodos para la vista del doctor
 const buildPeriodosDoctor = () => {
@@ -48,7 +48,6 @@ const buildPeriodosDoctor = () => {
   ];
 };
 
-const PERIODOS_DOCTOR = buildPeriodosDoctor();
 
 const ESTADO_COLOR = {
   confirmada: { bg: '#ECFDF5', color: '#047857', label: 'Confirmada' },
@@ -63,7 +62,8 @@ const HistorialDoctor = ({ user }) => {
   const [citas, setCitas]         = useState([]);
   const [loading, setLoading]     = useState(false);
 
-  const periodo = PERIODOS_DOCTOR.find(p => p.id === periodoId);
+  const periodosDoctor = buildPeriodosDoctor();
+  const periodo = periodosDoctor.find(p => p.id === periodoId);
 
   useEffect(() => {
     if (!periodo || !user?.doctorId) return;
@@ -97,7 +97,7 @@ const HistorialDoctor = ({ user }) => {
       {/* Selector de período */}
       <Card style={{ marginBottom: 20 }}>
         <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {PERIODOS_DOCTOR.map(p => (
+          {periodosDoctor.map(p => (
             <button key={p.id} onClick={() => setPeriodoId(p.id)} style={{
               padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
               border: `1.5px solid ${periodoId === p.id ? 'var(--dc-primary)' : 'var(--dc-border)'}`,
@@ -196,6 +196,8 @@ const LiquidacionAdmin = ({ user, doctors }) => {
   const [liquidado, setLiquidado]   = useState(false);
   const [liquidando, setLiquidando] = useState(false);
 
+  const periodosLiquidacion = buildPeriodos();
+
   useEffect(() => {
     getCatalogo().then(setCatalogo).catch(console.error);
   }, []);
@@ -204,7 +206,7 @@ const LiquidacionAdmin = ({ user, doctors }) => {
     if (doctors.length && !doctorId) setDoctorId(doctors[0].id);
   }, [doctors, doctorId]);
 
-  const periodo = PERIODOS_LIQUIDACION[periodoIdx];
+  const periodo = periodosLiquidacion[periodoIdx];
 
   useEffect(() => {
     if (!periodo) return;
@@ -275,7 +277,7 @@ const LiquidacionAdmin = ({ user, doctors }) => {
               Período
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {PERIODOS_LIQUIDACION.map((p, i) => (
+              {periodosLiquidacion.map((p, i) => (
                 <button key={p.id} onClick={() => setPeriodoIdx(i)} style={{
                   padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
                   border: `1.5px solid ${periodoIdx === i ? 'var(--dc-primary)' : 'var(--dc-border)'}`,
