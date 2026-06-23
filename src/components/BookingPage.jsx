@@ -31,18 +31,17 @@ const getNextDays = (n = 14) => {
   return days;
 };
 
-const DAYS = getNextDays(14);
-
 const STEP_LABELS = ['Doctor', 'Fecha', 'Hora', 'Tus datos'];
 
 const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
   const suc = sucursales || {};
   const firstSuc = Object.keys(suc)[0] || 'A';
 
+  const [days]           = useState(getNextDays);
   const [step,           setStep]           = useState(1);
   const [sucursal,       setSucursal]       = useState(firstSuc);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [selectedDay,    setSelectedDay]    = useState(null);
+  const [selectedDay,    setSelectedDay]    = useState(null); // ISO string YYYY-MM-DD
   const [selectedTime,   setTime]           = useState(null);
   const [form,           setForm]           = useState({ nombre: '', tel: '', motivo: MOTIVOS[0] });
   const [errors,         setErrors]         = useState({});
@@ -68,11 +67,11 @@ const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
   };
 
   // Carga horarios ocupados al entrar al paso 3
-  const loadSlots = (day, doctor) => {
+  const loadSlots = (dayIso, doctor) => {
     setLoadingSlots(true);
     setSlotsError(false);
     setOccupied(new Set());
-    getOcupadosDia(day.iso, doctor?.id || null)
+    getOcupadosDia(dayIso, doctor?.id || null)
       .then(setOccupied)
       .catch(() => { setOccupied(new Set()); setSlotsError(true); })
       .finally(() => setLoadingSlots(false));
@@ -107,7 +106,7 @@ const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
     setSubmitError('');
     try {
       await createSolicitud({
-        fecha:       selectedDay.iso,
+        fecha:       selectedDay,
         hora:        selectedTime,
         sucursal_id: sucursal,
         nombre:      form.nombre.trim(),
@@ -130,7 +129,8 @@ const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
     setForm({ nombre: '', tel: '', motivo: MOTIVOS[0] }); setErrors({}); setSubmitError('');
   };
 
-  const dayLabel = selectedDay ? `${selectedDay.label} ${selectedDay.day} de ${selectedDay.month}` : '';
+  const selectedDayObj = selectedDay ? days.find(d => d.iso === selectedDay) : null;
+  const dayLabel = selectedDayObj ? `${selectedDayObj.label} ${selectedDayObj.day} de ${selectedDayObj.month}` : '';
 
   // ── Render ────────────────────────────────────────────────────────
 
@@ -282,12 +282,12 @@ const BookingPage = ({ sucursales, doctors: doctorsProp = [], onBack }) => {
                 Días disponibles (próximas 2 semanas)
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                {DAYS.map((day) => {
-                  const isSel = selectedDay?.iso === day.iso;
+                {days.map((day) => {
+                  const isSel = selectedDay === day.iso;
                   return (
                     <button
                       key={day.iso}
-                      onClick={() => setSelectedDay(isSel ? null : day)}
+                      onClick={() => setSelectedDay(isSel ? null : day.iso)}
                       style={{
                         padding: '12px 4px', borderRadius: 10, cursor: 'pointer', textAlign: 'center',
                         border: `2px solid ${isSel ? 'var(--dc-primary)' : '#E2E8F0'}`,
