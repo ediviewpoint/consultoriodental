@@ -434,24 +434,23 @@ export const getDeudaViva = async () => {
 };
 
 // ── Liquidaciones ────────────────────────────────────────────────
-export const getLiquidacion = async (periodo, doctorId) => {
-  const { data } = await supabase
-    .from('liquidaciones')
-    .select('liquidado, fecha_liquidacion')
-    .eq('periodo', periodo)
-    .eq('doctor_id', doctorId)
-    .maybeSingle();
-  return data;
+export const getLiquidaciones = async () => {
+  const { data, error } = await supabase.from('liquidaciones').select('*');
+  if (error) throw error;
+  return data || [];
 };
 
-export const marcarLiquidacion = async (periodo, doctorId) => {
-  const { error } = await supabase
+export const marcarLiquidacion = async ({ periodo, doctor_id }) => {
+  const { data, error } = await supabase
     .from('liquidaciones')
     .upsert(
-      { periodo, doctor_id: doctorId, liquidado: true, fecha_liquidacion: new Date().toISOString() },
+      { periodo, doctor_id, liquidado: true, fecha_liquidacion: new Date().toISOString() },
       { onConflict: 'periodo,doctor_id' }
-    );
+    )
+    .select()
+    .single();
   if (error) throw error;
+  return data;
 };
 
 // ── Perfiles / Usuarios ───────────────────────────────────────────
