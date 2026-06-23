@@ -401,12 +401,12 @@ const Agenda = ({ consultorio, user, sucursales, doctors = [] }) => {
             {[1, 2, 3, 4, 5, 6].map((dayN) => (
               <div key={dayN} className="day-col" style={{ position: 'relative' }}>
                 {HOURS.map((h) => <div key={h} className="day-cell" />)}
-                {filteredAppts.filter((a) => a.dia === dayN).map((a) => {
+                {filteredAppts.filter((a) => a.dia === dayN).map((a, i) => {
                   const top    = (a.hora - 8) * ROW_H;
                   const height = (a.dur || 1) * ROW_H - 4;
                   return (
                     <div
-                      key={a._id || `${a.dia}-${a.hora}-${a.paciente}`}
+                      key={a.id || a._id || i}
                       className={`appt ${a.estado}`}
                       style={{ top: `${top + 2}px`, height: `${height}px`, cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
                       onClick={() => setDetailAppt(a)}
