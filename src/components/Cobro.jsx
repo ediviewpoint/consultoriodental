@@ -293,7 +293,7 @@ const Cobro = ({ patient, onNavigate, consultorio: consultorioProp, sucursales }
         await createPago({
           pacienteId: pat.id || null,
           doctorId:   pat.doctor_id || null,
-          sucursalId: consultorio || null,
+          sucursalId: sucKey || null,
           monto: aCuenta,
           metodo: method,
           banco: banco || null,
