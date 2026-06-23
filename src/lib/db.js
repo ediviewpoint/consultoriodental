@@ -394,14 +394,16 @@ export const getConsentimientos = async (pacienteId) => {
 };
 
 export const updateConsentimientoFirmado = async (id, firmado) => {
-  await supabase.from('consentimientos').update({ firmado }).eq('id', id);
+  const { error } = await supabase.from('consentimientos').update({ firmado }).eq('id', id);
+  if (error) throw error;
 };
 
 export const createConsentimiento = async (pacienteId, doc) => {
   const today = new Date().toISOString().split('T')[0];
-  await supabase.from('consentimientos').insert({
+  const { error } = await supabase.from('consentimientos').insert({
     paciente_id: pacienteId, documento: doc.documento, fecha: today, firmado: false,
   });
+  if (error) throw error;
 };
 
 // ── Deuda viva ────────────────────────────────────────────────────
